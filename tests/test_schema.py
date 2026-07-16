@@ -165,6 +165,11 @@ def test_discovery_method_check_rejects_illegal_value(conn):
         conn.execute(sa.insert(schema.firmware_sources), source_row(discovery_method="rss"))
 
 
+def test_region_code_check_rejects_non_two_letter_value(conn):
+    with pytest.raises(sa.exc.IntegrityError):
+        conn.execute(sa.insert(schema.firmware_sources), source_row(region_code="China"))
+
+
 def test_product_family_type_combination_check(conn):
     conn.execute(sa.insert(schema.firmware_sources), source_row())
     conn.execute(sa.insert(schema.crawl_runs), run_row())

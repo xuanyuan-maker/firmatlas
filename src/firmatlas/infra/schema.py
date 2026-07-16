@@ -48,6 +48,8 @@ firmware_sources = Table(
         name="ck_sources_discovery_method",
     ),
     CheckConstraint("enabled IN (0, 1)", name="ck_sources_enabled"),
+    # 地区代码限定为两字母（CN、US 等），防止整段地区名误入库
+    CheckConstraint("length(region_code) = 2", name="ck_sources_region_code_length"),
 )
 
 # 2. products：来源下的产品
