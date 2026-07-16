@@ -23,6 +23,15 @@ def uow_factory(engine):
 
 
 @pytest.fixture
+def seeded_source(uow_factory, make_source):
+    """预先入库一个 tp-link-cn 来源，返回其领域对象。"""
+    source = make_source()
+    with uow_factory.begin() as uow:
+        uow.sources.ensure_seed_sources([source])
+    return source
+
+
+@pytest.fixture
 def make_source():
     """构造一个可入库的 FirmwareSource，字段可用关键字参数覆盖。"""
 

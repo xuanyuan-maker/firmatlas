@@ -8,6 +8,7 @@
 - 时间在数据库中是 RFC 3339 文本，读写时经 timeutil 与 datetime 互转。
 """
 
+import json
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
@@ -15,7 +16,15 @@ from datetime import datetime
 import sqlalchemy as sa
 
 from firmatlas.domain.errors import FirmAtlasError, RepositoryError
-from firmatlas.domain.model import DiscoveryMethod, FirmwareSource
+from firmatlas.domain.ids import new_id
+from firmatlas.domain.model import (
+    AdapterIssue,
+    CrawlRun,
+    CrawlRunStatus,
+    CrawlStats,
+    DiscoveryMethod,
+    FirmwareSource,
+)
 from firmatlas.domain.timeutil import format_rfc3339, parse_rfc3339
 from firmatlas.infra import schema
 
@@ -101,11 +110,120 @@ class SqliteSourceRepository:
                 )
 
 
+def _issues_to_json(issues: Sequence[AdapterIssue]) -> str:
+    return json.dumps(
+        [{"code": i.code, "detail": i.detail, "source_url": i.source_url} for i in issues],
+        ensure_ascii=False,
+    )
+
+
+def _issues_from_json(text: str) -> tuple[AdapterIssue, ...]:
+    return tuple(AdapterIssue(**item) for item in json.loads(text))
+
+
+def _run_from_row(row: sa.Row) -> CrawlRun:
+    return CrawlRun(
+        id=row.id,
+        source_id=row.source_id,
+        status=CrawlRunStatus(row.status),
+        is_complete=bool(row.is_complete),
+        started_at=parse_rfc3339(row.started_at),
+        finished_at=_opt_parse(row.finished_at),
+        products_seen=row.products_seen,
+        releases_seen=row.releases_seen,
+        artifacts_seen=row.artifacts_seen,
+        items_added=row.items_added,
+        items_updated=row.items_updated,
+        items_disappeared=row.items_disappeared,
+        items_skipped=row.items_skipped,
+        error_count=row.error_count,
+        error_summary=row.error_summary,
+        issues=_issues_from_json(row.issues_json),
+        created_at=parse_rfc3339(row.created_at),
+    )
+
+
+class SqliteCrawlRunRepository:
+    def __init__(self, conn: sa.Connection) -> None:
+        self._conn = conn
+
+    def create_run(self, *, source_id: str, started_at: datetime) -> CrawlRun:
+        t = schema.crawl_runs
+        run_id = new_id()
+        started_text = format_rfc3339(started_at)
+        with _wrap_errors("创建采集运行"):
+            self._conn.execute(
+                t.insert().values(
+                    id=run_id,
+                    source_id=source_id,
+                    status=CrawlRunStatus.RUNNING.value,
+                    is_complete=0,
+                    started_at=started_text,
+                    finished_at=None,
+                    created_at=started_text,
+                )
+            )
+            row = self._conn.execute(sa.select(t).where(t.c.id == run_id)).one()
+        return _run_from_row(row)
+
+    def finalize_run(
+        self,
+        *,
+        run_id: str,
+        status: CrawlRunStatus,
+        is_complete: bool,
+        finished_at: datetime,
+        stats: CrawlStats,
+        error_summary: str | None,
+        issues: Sequence[AdapterIssue],
+    ) -> None:
+        t = schema.crawl_runs
+        with _wrap_errors("收尾采集运行"):
+            result = self._conn.execute(
+                t.update()
+                .where(t.c.id == run_id)
+                .values(
+                    status=status.value,
+                    is_complete=int(is_complete),
+                    finished_at=format_rfc3339(finished_at),
+                    products_seen=stats.products_seen,
+                    releases_seen=stats.releases_seen,
+                    artifacts_seen=stats.artifacts_seen,
+                    items_added=stats.items_added,
+                    items_updated=stats.items_updated,
+                    items_disappeared=stats.items_disappeared,
+                    items_skipped=stats.items_skipped,
+                    error_count=stats.error_count,
+                    error_summary=error_summary,
+                    issues_json=_issues_to_json(issues),
+                )
+            )
+        if result.rowcount == 0:
+            raise RepositoryError(f"收尾采集运行失败：运行 {run_id} 不存在")
+
+    def list_runs(self, *, source_id: str | None = None, limit: int = 50) -> list[CrawlRun]:
+        t = schema.crawl_runs
+        query = sa.select(t).order_by(t.c.started_at.desc(), t.c.id).limit(limit)
+        if source_id is not None:
+            query = query.where(t.c.source_id == source_id)
+        with _wrap_errors("查询采集运行"):
+            rows = self._conn.execute(query).all()
+        return [_run_from_row(row) for row in rows]
+
+    def find_stale_running(self) -> list[CrawlRun]:
+        t = schema.crawl_runs
+        query = sa.select(t).where(t.c.status == CrawlRunStatus.RUNNING.value)
+        with _wrap_errors("查询遗留运行"):
+            rows = self._conn.execute(query).all()
+        return [_run_from_row(row) for row in rows]
+
+
 class SqliteUnitOfWork:
     """一次事务内可用的各 Repository 集合。由工厂创建，业务层不直接构造。"""
 
     def __init__(self, conn: sa.Connection) -> None:
         self.sources = SqliteSourceRepository(conn)
+        self.runs = SqliteCrawlRunRepository(conn)
 
 
 class SqliteUnitOfWorkFactory:
