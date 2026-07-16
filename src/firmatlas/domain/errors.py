@@ -18,3 +18,11 @@ class DatabaseNotInitializedError(RepositoryError):
 
 class SchemaVersionMismatchError(RepositoryError):
     """数据库结构版本与程序期望不一致，拒绝打开（AC-32）。"""
+
+
+class ActiveDownloadExistsError(RepositoryError):
+    """同一 Artifact 已有 queued/downloading 的活动下载记录（AC-30）。"""
+
+
+class InvalidTransitionError(RepositoryError):
+    """下载记录的状态机不允许本次变迁。"""
