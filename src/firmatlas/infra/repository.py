@@ -21,7 +21,12 @@ from firmatlas.domain.candidates import (
     HardwareRevisionCandidate,
     ProductCandidate,
 )
-from firmatlas.domain.errors import FirmAtlasError, RepositoryError
+from firmatlas.domain.errors import (
+    ActiveDownloadExistsError,
+    FirmAtlasError,
+    InvalidTransitionError,
+    RepositoryError,
+)
 from firmatlas.domain.ids import new_id
 from firmatlas.domain.model import (
     AdapterIssue,
@@ -32,6 +37,9 @@ from firmatlas.domain.model import (
     CrawlStats,
     DisappearanceSummary,
     DiscoveryMethod,
+    DownloadPatch,
+    DownloadRecord,
+    DownloadStatus,
     FirmwareArtifact,
     FirmwareRelease,
     FirmwareSource,
@@ -41,6 +49,7 @@ from firmatlas.domain.model import (
     ProductFamily,
     ProductType,
     UpsertResult,
+    VerificationStatus,
     VisibilityStatus,
 )
 from firmatlas.domain.timeutil import format_rfc3339, parse_rfc3339
@@ -684,6 +693,163 @@ class SqliteCrawlRunRepository:
         return [_run_from_row(row) for row in rows]
 
 
+def _download_from_row(row: sa.Row) -> DownloadRecord:
+    return DownloadRecord(
+        id=row.id,
+        artifact_id=row.artifact_id,
+        status=DownloadStatus(row.status),
+        verification_status=VerificationStatus(row.verification_status),
+        requested_at=parse_rfc3339(row.requested_at),
+        started_at=_opt_parse(row.started_at),
+        finished_at=_opt_parse(row.finished_at),
+        resolved_url=row.resolved_url,
+        url_refresh_count=row.url_refresh_count,
+        temporary_relative_path=row.temporary_relative_path,
+        final_relative_path=row.final_relative_path,
+        bytes_received=row.bytes_received,
+        size_bytes=row.size_bytes,
+        sha256=row.sha256,
+        attempt_count=row.attempt_count,
+        http_etag=row.http_etag,
+        http_last_modified=row.http_last_modified,
+        error_code=row.error_code,
+        error_message=row.error_message,
+    )
+
+
+# 下载记录状态机：downloading → downloading 用于过程中更新进度字段
+_ALLOWED_TRANSITIONS: dict[DownloadStatus, frozenset[DownloadStatus]] = {
+    DownloadStatus.QUEUED: frozenset(
+        {DownloadStatus.DOWNLOADING, DownloadStatus.FAILED, DownloadStatus.CANCELLED}
+    ),
+    DownloadStatus.DOWNLOADING: frozenset(
+        {
+            DownloadStatus.DOWNLOADING,
+            DownloadStatus.COMPLETED,
+            DownloadStatus.FAILED,
+            DownloadStatus.CANCELLED,
+            DownloadStatus.INTERRUPTED,
+        }
+    ),
+    DownloadStatus.COMPLETED: frozenset(),
+    DownloadStatus.FAILED: frozenset(),
+    DownloadStatus.CANCELLED: frozenset(),
+    DownloadStatus.INTERRUPTED: frozenset(),
+}
+
+# DownloadPatch 中不需要类型转换、可直接写入同名列的字段
+_PATCH_PLAIN_FIELDS = (
+    "resolved_url",
+    "url_refresh_count",
+    "temporary_relative_path",
+    "final_relative_path",
+    "bytes_received",
+    "size_bytes",
+    "sha256",
+    "attempt_count",
+    "http_etag",
+    "http_last_modified",
+    "error_code",
+    "error_message",
+)
+
+
+class SqliteDownloadRepository:
+    def __init__(self, conn: sa.Connection) -> None:
+        self._conn = conn
+
+    def create_download(self, *, artifact_id: str, requested_at: datetime) -> DownloadRecord:
+        t = schema.download_records
+        active_statuses = [DownloadStatus.QUEUED.value, DownloadStatus.DOWNLOADING.value]
+        with _wrap_errors("创建下载记录"):
+            active = self._conn.execute(
+                sa.select(t.c.id).where(
+                    t.c.artifact_id == artifact_id, t.c.status.in_(active_statuses)
+                )
+            ).first()
+            if active is not None:
+                raise ActiveDownloadExistsError(
+                    f"Artifact {artifact_id} 已有进行中的下载任务（记录 {active.id}），"
+                    f"不允许重复发起（AC-30）"
+                )
+            download_id = new_id()
+            try:
+                self._conn.execute(
+                    t.insert().values(
+                        id=download_id,
+                        artifact_id=artifact_id,
+                        status=DownloadStatus.QUEUED.value,
+                        verification_status=VerificationStatus.NOT_CHECKED.value,
+                        requested_at=format_rfc3339(requested_at),
+                    )
+                )
+            except sa.exc.IntegrityError as exc:
+                # 部分唯一索引兜底（理论上被上面的预检查挡住）
+                if "uq_downloads_one_active_per_artifact" in str(exc):
+                    raise ActiveDownloadExistsError(
+                        f"Artifact {artifact_id} 已有进行中的下载任务，不允许重复发起（AC-30）"
+                    ) from exc
+                raise
+            row = self._conn.execute(sa.select(t).where(t.c.id == download_id)).one()
+        return _download_from_row(row)
+
+    def transition(self, *, download_id: str, patch: DownloadPatch) -> DownloadRecord:
+        t = schema.download_records
+        with _wrap_errors("推进下载状态"):
+            row = self._conn.execute(sa.select(t).where(t.c.id == download_id)).first()
+            if row is None:
+                raise RepositoryError(f"推进下载状态失败：下载记录 {download_id} 不存在")
+            current = DownloadStatus(row.status)
+            if patch.status not in _ALLOWED_TRANSITIONS[current]:
+                raise InvalidTransitionError(
+                    f"下载记录 {download_id} 不允许从 {current.value} 变迁到 {patch.status.value}"
+                )
+            values: dict = {"status": patch.status.value}
+            if patch.verification_status is not None:
+                values["verification_status"] = patch.verification_status.value
+            if patch.started_at is not None:
+                values["started_at"] = format_rfc3339(patch.started_at)
+            if patch.finished_at is not None:
+                values["finished_at"] = format_rfc3339(patch.finished_at)
+            for field in _PATCH_PLAIN_FIELDS:
+                value = getattr(patch, field)
+                if value is not None:
+                    values[field] = value
+            self._conn.execute(t.update().where(t.c.id == download_id).values(**values))
+            updated = self._conn.execute(sa.select(t).where(t.c.id == download_id)).one()
+        return _download_from_row(updated)
+
+    def list_downloads(
+        self,
+        *,
+        status: DownloadStatus | None = None,
+        artifact_id: str | None = None,
+        limit: int = 50,
+    ) -> list[DownloadRecord]:
+        t = schema.download_records
+        query = sa.select(t).order_by(t.c.requested_at.desc(), t.c.id).limit(limit)
+        if status is not None:
+            query = query.where(t.c.status == status.value)
+        if artifact_id is not None:
+            query = query.where(t.c.artifact_id == artifact_id)
+        with _wrap_errors("查询下载记录"):
+            rows = self._conn.execute(query).all()
+        return [_download_from_row(row) for row in rows]
+
+    def find_stale_active(self) -> list[DownloadRecord]:
+        """启动时识别崩溃遗留的 queued/downloading 记录。
+
+        遗留的 queued 也要找出来：它会占住“单活动任务”约束，阻塞后续下载。
+        """
+        t = schema.download_records
+        query = sa.select(t).where(
+            t.c.status.in_([DownloadStatus.QUEUED.value, DownloadStatus.DOWNLOADING.value])
+        )
+        with _wrap_errors("查询遗留下载"):
+            rows = self._conn.execute(query).all()
+        return [_download_from_row(row) for row in rows]
+
+
 class SqliteUnitOfWork:
     """一次事务内可用的各 Repository 集合。由工厂创建，业务层不直接构造。"""
 
@@ -691,6 +857,7 @@ class SqliteUnitOfWork:
         self.sources = SqliteSourceRepository(conn)
         self.catalog = SqliteCatalogRepository(conn)
         self.runs = SqliteCrawlRunRepository(conn)
+        self.downloads = SqliteDownloadRepository(conn)
 
 
 class SqliteUnitOfWorkFactory:
