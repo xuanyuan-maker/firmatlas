@@ -2,3 +2,19 @@
 CLAUDE.md
 AGENTS.md
 .claude/
+
+# Local planning docs
+PLAN.md
+docs/interface-design.md
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+dist/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# FirmAtlas 运行数据
+data/

@@ -1,0 +1,37 @@
+[project]
+name = "firmatlas"
+version = "0.1.0"
+description = "面向个人漏洞猎人的 IoT 固件发现与按需获取工具"
+readme = "README.md"
+authors = [
+    { name = "xuanyuan-maker", email = "2271818954@qq.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "click>=8.4.2",
+    "httpx>=0.28.1",
+    "sqlalchemy>=2.0.51",
+]
+
+[project.scripts]
+firmatlas = "firmatlas.cli.main:main"
+
+[build-system]
+requires = ["uv_build>=0.11.28,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.15.21",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
