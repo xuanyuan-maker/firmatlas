@@ -11,7 +11,7 @@
 import json
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import date, datetime
 
 import sqlalchemy as sa
 
@@ -25,11 +25,21 @@ from firmatlas.domain.errors import FirmAtlasError, RepositoryError
 from firmatlas.domain.ids import new_id
 from firmatlas.domain.model import (
     AdapterIssue,
+    ArtifactContext,
+    ArtifactType,
     CrawlRun,
     CrawlRunStatus,
     CrawlStats,
+    DisappearanceSummary,
     DiscoveryMethod,
+    FirmwareArtifact,
+    FirmwareRelease,
     FirmwareSource,
+    HardwareRevision,
+    OfficialChecksum,
+    Product,
+    ProductFamily,
+    ProductType,
     UpsertResult,
     VisibilityStatus,
 )
@@ -116,6 +126,94 @@ class SqliteSourceRepository:
                         updated_at=format_rfc3339(seed.updated_at),
                     )
                 )
+
+
+def _product_from_row(row: sa.Row) -> Product:
+    return Product(
+        id=row.id,
+        source_id=row.source_id,
+        source_key=row.source_key,
+        display_name=row.display_name,
+        model_raw=row.model_raw,
+        model_normalized=row.model_normalized,
+        series=row.series,
+        product_family=ProductFamily(row.product_family),
+        product_type=ProductType(row.product_type),
+        source_category=row.source_category,
+        source_url=row.source_url,
+        first_seen_at=parse_rfc3339(row.first_seen_at),
+        last_seen_at=parse_rfc3339(row.last_seen_at),
+        last_seen_run_id=row.last_seen_run_id,
+        created_at=parse_rfc3339(row.created_at),
+        updated_at=parse_rfc3339(row.updated_at),
+    )
+
+
+def _revision_from_row(row: sa.Row) -> HardwareRevision:
+    return HardwareRevision(
+        id=row.id,
+        product_id=row.product_id,
+        source_key=row.source_key,
+        raw_revision=row.raw_revision,
+        normalized_revision=row.normalized_revision,
+        revision_explicit=bool(row.revision_explicit),
+        source_url=row.source_url,
+        first_seen_at=parse_rfc3339(row.first_seen_at),
+        last_seen_at=parse_rfc3339(row.last_seen_at),
+        last_seen_run_id=row.last_seen_run_id,
+        created_at=parse_rfc3339(row.created_at),
+        updated_at=parse_rfc3339(row.updated_at),
+    )
+
+
+def _release_from_row(row: sa.Row) -> FirmwareRelease:
+    return FirmwareRelease(
+        id=row.id,
+        hardware_revision_id=row.hardware_revision_id,
+        source_key=row.source_key,
+        version_raw=row.version_raw,
+        version_normalized=row.version_normalized,
+        release_date=date.fromisoformat(row.release_date) if row.release_date else None,
+        title=row.title,
+        release_notes=row.release_notes,
+        release_notes_url=row.release_notes_url,
+        source_url=row.source_url,
+        visibility_status=VisibilityStatus(row.visibility_status),
+        first_seen_at=parse_rfc3339(row.first_seen_at),
+        last_seen_at=parse_rfc3339(row.last_seen_at),
+        disappeared_at=_opt_parse(row.disappeared_at),
+        last_seen_run_id=row.last_seen_run_id,
+        created_at=parse_rfc3339(row.created_at),
+        updated_at=parse_rfc3339(row.updated_at),
+    )
+
+
+def _artifact_from_row(row: sa.Row) -> FirmwareArtifact:
+    checksum = None
+    if row.official_checksum_algorithm is not None and row.official_checksum_value is not None:
+        checksum = OfficialChecksum(
+            algorithm=row.official_checksum_algorithm, value=row.official_checksum_value
+        )
+    return FirmwareArtifact(
+        id=row.id,
+        release_id=row.release_id,
+        source_key=row.source_key,
+        artifact_type=ArtifactType(row.artifact_type),
+        original_filename=row.original_filename,
+        download_url=row.download_url,
+        url_last_resolved_at=parse_rfc3339(row.url_last_resolved_at),
+        url_expires_at=_opt_parse(row.url_expires_at),
+        advertised_size=row.advertised_size,
+        media_type=row.media_type,
+        official_checksum=checksum,
+        visibility_status=VisibilityStatus(row.visibility_status),
+        first_seen_at=parse_rfc3339(row.first_seen_at),
+        last_seen_at=parse_rfc3339(row.last_seen_at),
+        disappeared_at=_opt_parse(row.disappeared_at),
+        last_seen_run_id=row.last_seen_run_id,
+        created_at=parse_rfc3339(row.created_at),
+        updated_at=parse_rfc3339(row.updated_at),
+    )
 
 
 class SqliteCatalogRepository:
@@ -357,6 +455,125 @@ class SqliteCatalogRepository:
                 values["url_last_resolved_at"] = seen_text
             self._conn.execute(t.update().where(t.c.id == existing.id).values(**values))
             return UpsertResult(entity_id=existing.id, created=False)
+
+    def mark_unseen_as_disappeared(
+        self, *, source_id: str, run_id: str, confirmed_at: datetime
+    ) -> DisappearanceSummary:
+        """将该来源下本轮未见到（last_seen_run_id != run_id）的 active 发布
+        与 Artifact 置为 disappeared。只在完整采集成功后由用例调用（AC-15）。
+        """
+        prod = schema.products
+        rev = schema.hardware_revisions
+        rel = schema.firmware_releases
+        art = schema.firmware_artifacts
+        confirmed_text = format_rfc3339(confirmed_at)
+
+        # 该来源下所有发布/Artifact 的 ID（经 产品→硬件版本→发布 外键链回溯）
+        release_ids = (
+            sa.select(rel.c.id)
+            .select_from(
+                rel.join(rev, rel.c.hardware_revision_id == rev.c.id).join(
+                    prod, rev.c.product_id == prod.c.id
+                )
+            )
+            .where(prod.c.source_id == source_id)
+        )
+        artifact_ids = (
+            sa.select(art.c.id)
+            .select_from(
+                art.join(rel, art.c.release_id == rel.c.id)
+                .join(rev, rel.c.hardware_revision_id == rev.c.id)
+                .join(prod, rev.c.product_id == prod.c.id)
+            )
+            .where(prod.c.source_id == source_id)
+        )
+        disappeared_values = {
+            "visibility_status": VisibilityStatus.DISAPPEARED.value,
+            "disappeared_at": confirmed_text,
+            "updated_at": confirmed_text,
+        }
+        with _wrap_errors("消失对账"):
+            releases_result = self._conn.execute(
+                rel.update()
+                .where(
+                    rel.c.id.in_(release_ids),
+                    rel.c.visibility_status == VisibilityStatus.ACTIVE.value,
+                    rel.c.last_seen_run_id != run_id,
+                )
+                .values(**disappeared_values)
+            )
+            artifacts_result = self._conn.execute(
+                art.update()
+                .where(
+                    art.c.id.in_(artifact_ids),
+                    art.c.visibility_status == VisibilityStatus.ACTIVE.value,
+                    art.c.last_seen_run_id != run_id,
+                )
+                .values(**disappeared_values)
+            )
+        return DisappearanceSummary(
+            releases_disappeared=releases_result.rowcount,
+            artifacts_disappeared=artifacts_result.rowcount,
+        )
+
+    def update_artifact_url(
+        self,
+        *,
+        artifact_id: str,
+        download_url: str,
+        url_expires_at: datetime | None,
+        resolved_at: datetime,
+    ) -> None:
+        t = schema.firmware_artifacts
+        resolved_text = format_rfc3339(resolved_at)
+        with _wrap_errors("更新下载地址"):
+            result = self._conn.execute(
+                t.update()
+                .where(t.c.id == artifact_id)
+                .values(
+                    download_url=download_url,
+                    url_expires_at=_opt_format(url_expires_at),
+                    url_last_resolved_at=resolved_text,
+                    updated_at=resolved_text,
+                )
+            )
+        if result.rowcount == 0:
+            raise RepositoryError(f"更新下载地址失败：Artifact {artifact_id} 不存在")
+
+    def get_artifact_context(self, artifact_id: str) -> ArtifactContext | None:
+        with _wrap_errors("查询 Artifact 上下文"):
+            art_row = self._conn.execute(
+                sa.select(schema.firmware_artifacts).where(
+                    schema.firmware_artifacts.c.id == artifact_id
+                )
+            ).first()
+            if art_row is None:
+                return None
+            rel_row = self._conn.execute(
+                sa.select(schema.firmware_releases).where(
+                    schema.firmware_releases.c.id == art_row.release_id
+                )
+            ).one()
+            rev_row = self._conn.execute(
+                sa.select(schema.hardware_revisions).where(
+                    schema.hardware_revisions.c.id == rel_row.hardware_revision_id
+                )
+            ).one()
+            prod_row = self._conn.execute(
+                sa.select(schema.products).where(schema.products.c.id == rev_row.product_id)
+            ).one()
+            source_row = self._conn.execute(
+                sa.select(schema.firmware_sources).where(
+                    schema.firmware_sources.c.id == prod_row.source_id
+                )
+            ).one()
+        return ArtifactContext(
+            source=_source_from_row(source_row),
+            product=_product_from_row(prod_row),
+            hardware_revision=_revision_from_row(rev_row),
+            release=_release_from_row(rel_row),
+            artifact=_artifact_from_row(art_row),
+        )
 
 
 def _issues_to_json(issues: Sequence[AdapterIssue]) -> str:
