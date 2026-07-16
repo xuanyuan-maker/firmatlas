@@ -15,6 +15,12 @@ from datetime import datetime
 
 import sqlalchemy as sa
 
+from firmatlas.domain.candidates import (
+    FirmwareArtifactCandidate,
+    FirmwareReleaseCandidate,
+    HardwareRevisionCandidate,
+    ProductCandidate,
+)
 from firmatlas.domain.errors import FirmAtlasError, RepositoryError
 from firmatlas.domain.ids import new_id
 from firmatlas.domain.model import (
@@ -24,6 +30,8 @@ from firmatlas.domain.model import (
     CrawlStats,
     DiscoveryMethod,
     FirmwareSource,
+    UpsertResult,
+    VisibilityStatus,
 )
 from firmatlas.domain.timeutil import format_rfc3339, parse_rfc3339
 from firmatlas.infra import schema
@@ -108,6 +116,247 @@ class SqliteSourceRepository:
                         updated_at=format_rfc3339(seed.updated_at),
                     )
                 )
+
+
+class SqliteCatalogRepository:
+    """目录写入。幂等键为 (父ID, source_key)：命中则更新非身份字段并推进
+    last_seen_at/last_seen_run_id、保留 first_seen_at；未命中则新增（AC-13、AC-14）。
+    """
+
+    def __init__(self, conn: sa.Connection) -> None:
+        self._conn = conn
+
+    def upsert_product(
+        self, *, source_id: str, candidate: ProductCandidate, run_id: str, seen_at: datetime
+    ) -> UpsertResult:
+        t = schema.products
+        seen_text = format_rfc3339(seen_at)
+        with _wrap_errors("保存产品"):
+            existing = self._conn.execute(
+                sa.select(t.c.id).where(
+                    t.c.source_id == source_id, t.c.source_key == candidate.source_key
+                )
+            ).first()
+            if existing is None:
+                product_id = new_id()
+                self._conn.execute(
+                    t.insert().values(
+                        id=product_id,
+                        source_id=source_id,
+                        source_key=candidate.source_key,
+                        display_name=candidate.display_name,
+                        model_raw=candidate.model_raw,
+                        model_normalized=candidate.model_normalized,
+                        series=candidate.series,
+                        product_family=candidate.product_family.value,
+                        product_type=candidate.product_type.value,
+                        source_category=candidate.source_category,
+                        source_url=candidate.source_url,
+                        first_seen_at=seen_text,
+                        last_seen_at=seen_text,
+                        last_seen_run_id=run_id,
+                        created_at=seen_text,
+                        updated_at=seen_text,
+                    )
+                )
+                return UpsertResult(entity_id=product_id, created=True)
+            self._conn.execute(
+                t.update()
+                .where(t.c.id == existing.id)
+                .values(
+                    display_name=candidate.display_name,
+                    model_raw=candidate.model_raw,
+                    model_normalized=candidate.model_normalized,
+                    series=candidate.series,
+                    product_family=candidate.product_family.value,
+                    product_type=candidate.product_type.value,
+                    source_category=candidate.source_category,
+                    source_url=candidate.source_url,
+                    last_seen_at=seen_text,
+                    last_seen_run_id=run_id,
+                    updated_at=seen_text,
+                )
+            )
+            return UpsertResult(entity_id=existing.id, created=False)
+
+    def upsert_hardware_revision(
+        self,
+        *,
+        product_id: str,
+        candidate: HardwareRevisionCandidate,
+        run_id: str,
+        seen_at: datetime,
+    ) -> UpsertResult:
+        t = schema.hardware_revisions
+        seen_text = format_rfc3339(seen_at)
+        with _wrap_errors("保存硬件版本"):
+            existing = self._conn.execute(
+                sa.select(t.c.id).where(
+                    t.c.product_id == product_id, t.c.source_key == candidate.source_key
+                )
+            ).first()
+            if existing is None:
+                revision_id = new_id()
+                self._conn.execute(
+                    t.insert().values(
+                        id=revision_id,
+                        product_id=product_id,
+                        source_key=candidate.source_key,
+                        raw_revision=candidate.raw_revision,
+                        normalized_revision=candidate.normalized_revision,
+                        revision_explicit=int(candidate.revision_explicit),
+                        source_url=candidate.source_url,
+                        first_seen_at=seen_text,
+                        last_seen_at=seen_text,
+                        last_seen_run_id=run_id,
+                        created_at=seen_text,
+                        updated_at=seen_text,
+                    )
+                )
+                return UpsertResult(entity_id=revision_id, created=True)
+            self._conn.execute(
+                t.update()
+                .where(t.c.id == existing.id)
+                .values(
+                    raw_revision=candidate.raw_revision,
+                    normalized_revision=candidate.normalized_revision,
+                    revision_explicit=int(candidate.revision_explicit),
+                    source_url=candidate.source_url,
+                    last_seen_at=seen_text,
+                    last_seen_run_id=run_id,
+                    updated_at=seen_text,
+                )
+            )
+            return UpsertResult(entity_id=existing.id, created=False)
+
+    def upsert_release(
+        self,
+        *,
+        hardware_revision_id: str,
+        candidate: FirmwareReleaseCandidate,
+        run_id: str,
+        seen_at: datetime,
+    ) -> UpsertResult:
+        t = schema.firmware_releases
+        seen_text = format_rfc3339(seen_at)
+        release_date_text = (
+            candidate.release_date.isoformat() if candidate.release_date is not None else None
+        )
+        with _wrap_errors("保存固件发布"):
+            existing = self._conn.execute(
+                sa.select(t.c.id).where(
+                    t.c.hardware_revision_id == hardware_revision_id,
+                    t.c.source_key == candidate.source_key,
+                )
+            ).first()
+            if existing is None:
+                release_id = new_id()
+                self._conn.execute(
+                    t.insert().values(
+                        id=release_id,
+                        hardware_revision_id=hardware_revision_id,
+                        source_key=candidate.source_key,
+                        version_raw=candidate.version_raw,
+                        version_normalized=candidate.version_normalized,
+                        release_date=release_date_text,
+                        title=candidate.title,
+                        release_notes=candidate.release_notes,
+                        release_notes_url=candidate.release_notes_url,
+                        source_url=candidate.source_url,
+                        visibility_status=VisibilityStatus.ACTIVE.value,
+                        first_seen_at=seen_text,
+                        last_seen_at=seen_text,
+                        disappeared_at=None,
+                        last_seen_run_id=run_id,
+                        created_at=seen_text,
+                        updated_at=seen_text,
+                    )
+                )
+                return UpsertResult(entity_id=release_id, created=True)
+            # 重新出现：恢复 active 并清空 disappeared_at（AC-17）
+            self._conn.execute(
+                t.update()
+                .where(t.c.id == existing.id)
+                .values(
+                    version_raw=candidate.version_raw,
+                    version_normalized=candidate.version_normalized,
+                    release_date=release_date_text,
+                    title=candidate.title,
+                    release_notes=candidate.release_notes,
+                    release_notes_url=candidate.release_notes_url,
+                    source_url=candidate.source_url,
+                    visibility_status=VisibilityStatus.ACTIVE.value,
+                    disappeared_at=None,
+                    last_seen_at=seen_text,
+                    last_seen_run_id=run_id,
+                    updated_at=seen_text,
+                )
+            )
+            return UpsertResult(entity_id=existing.id, created=False)
+
+    def upsert_artifact(
+        self,
+        *,
+        release_id: str,
+        candidate: FirmwareArtifactCandidate,
+        run_id: str,
+        seen_at: datetime,
+    ) -> UpsertResult:
+        t = schema.firmware_artifacts
+        seen_text = format_rfc3339(seen_at)
+        checksum = candidate.official_checksum
+        with _wrap_errors("保存固件文件"):
+            existing = self._conn.execute(
+                sa.select(t.c.id, t.c.download_url).where(
+                    t.c.release_id == release_id, t.c.source_key == candidate.source_key
+                )
+            ).first()
+            if existing is None:
+                artifact_id = new_id()
+                self._conn.execute(
+                    t.insert().values(
+                        id=artifact_id,
+                        release_id=release_id,
+                        source_key=candidate.source_key,
+                        artifact_type=candidate.artifact_type.value,
+                        original_filename=candidate.original_filename,
+                        download_url=candidate.download_url,
+                        url_last_resolved_at=seen_text,
+                        url_expires_at=_opt_format(candidate.url_expires_at),
+                        advertised_size=candidate.advertised_size,
+                        media_type=candidate.media_type,
+                        official_checksum_algorithm=checksum.algorithm if checksum else None,
+                        official_checksum_value=checksum.value if checksum else None,
+                        visibility_status=VisibilityStatus.ACTIVE.value,
+                        first_seen_at=seen_text,
+                        last_seen_at=seen_text,
+                        disappeared_at=None,
+                        last_seen_run_id=run_id,
+                        created_at=seen_text,
+                        updated_at=seen_text,
+                    )
+                )
+                return UpsertResult(entity_id=artifact_id, created=True)
+            values = {
+                "artifact_type": candidate.artifact_type.value,
+                "original_filename": candidate.original_filename,
+                "download_url": candidate.download_url,
+                "url_expires_at": _opt_format(candidate.url_expires_at),
+                "advertised_size": candidate.advertised_size,
+                "media_type": candidate.media_type,
+                "official_checksum_algorithm": checksum.algorithm if checksum else None,
+                "official_checksum_value": checksum.value if checksum else None,
+                "visibility_status": VisibilityStatus.ACTIVE.value,
+                "disappeared_at": None,
+                "last_seen_at": seen_text,
+                "last_seen_run_id": run_id,
+                "updated_at": seen_text,
+            }
+            # 下载地址发生变化才刷新解析时间，方便判断地址新旧
+            if candidate.download_url != existing.download_url:
+                values["url_last_resolved_at"] = seen_text
+            self._conn.execute(t.update().where(t.c.id == existing.id).values(**values))
+            return UpsertResult(entity_id=existing.id, created=False)
 
 
 def _issues_to_json(issues: Sequence[AdapterIssue]) -> str:
@@ -223,6 +472,7 @@ class SqliteUnitOfWork:
 
     def __init__(self, conn: sa.Connection) -> None:
         self.sources = SqliteSourceRepository(conn)
+        self.catalog = SqliteCatalogRepository(conn)
         self.runs = SqliteCrawlRunRepository(conn)
 
 
