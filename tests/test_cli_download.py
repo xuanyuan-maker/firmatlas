@@ -123,6 +123,60 @@ def test_download_accepts_id_prefix(seeded_cli):
     assert "下载完成" in result.output
 
 
+def test_download_accepts_release_id(seeded_cli):
+    """list 输出的发布 ID（单 Artifact 发布）可直接下载。"""
+    import json
+
+    runner, data, _ = seeded_cli
+    result = runner.invoke(cli, ["--data-dir", data, "list", "--format", "json"])
+    release_id = json.loads(result.output)["rows"][0]["release_id"]
+
+    ScriptedDownloader.outcomes = [succeeded()]
+    result = runner.invoke(cli, ["--data-dir", data, "download", release_id[:8]])
+    assert result.exit_code == 0, result.output
+    assert "下载完成" in result.output
+
+
+def test_download_release_with_multiple_artifacts_lists_choices(
+    tmp_path, monkeypatch, make_product_candidate, make_revision_candidate,
+    make_release_candidate, make_artifact_candidate,
+):
+    """发布下有多个 Artifact：列出候选并要求指定，退出码 1。"""
+    runner = CliRunner()
+    data = str(tmp_path / "data")
+    runner.invoke(cli, ["--data-dir", data, "init"])
+
+    release = make_release_candidate(
+        artifacts=(
+            make_artifact_candidate(source_key="artifact-1", original_filename="fw-a.zip"),
+            make_artifact_candidate(source_key="artifact-2", original_filename="fw-b.zip"),
+        )
+    )
+    product = make_product_candidate(
+        hardware_revisions=(make_revision_candidate(releases=(release,)),)
+    )
+    events = [
+        DiscoveredProduct(product=product),
+        DiscoveryCompleted(is_complete=True, incomplete_reason=None, issues=()),
+    ]
+    monkeypatch.setattr(registry, "build_adapter", lambda key, http: FakeAdapter(list(events)))
+    result = runner.invoke(cli, ["--data-dir", data, "crawl", "tp-link-cn"])
+    assert result.exit_code == 0, result.output
+
+    import json
+
+    result = runner.invoke(cli, ["--data-dir", data, "list", "--format", "json"])
+    release_id = json.loads(result.output)["rows"][0]["release_id"]
+
+    monkeypatch.setattr(cli_main, "Downloader", ScriptedDownloader)
+    ScriptedDownloader.outcomes = []
+    result = runner.invoke(cli, ["--data-dir", data, "download", release_id[:8]])
+    assert result.exit_code == 1
+    assert "2 个 Artifact" in result.output
+    assert "fw-a.zip" in result.output
+    assert "fw-b.zip" in result.output
+
+
 def test_download_failure_exits_nonzero(seeded_cli):
     runner, data, artifact_id = seeded_cli
     ScriptedDownloader.outcomes = [

@@ -308,7 +308,7 @@ def list_command(
     ]
     _echo_table(headers, table)
     click.echo(f"共 {page.total} 条，当前显示 {offset + 1}-{offset + len(page.rows)} 条。")
-    click.echo("提示：用 firmatlas show <release-id> 查看详情（ID 可用前缀）。")
+    click.echo("提示：firmatlas show <release-id> 查看详情，firmatlas download <release-id> 下载。")
 
 
 @cli.command(name="show")
@@ -375,7 +375,7 @@ def show_command(ctx: click.Context, release_id: str, output_format: str) -> Non
 @click.argument("artifact_ids", nargs=-1, required=True)
 @click.pass_context
 def download_command(ctx: click.Context, artifact_ids: tuple[str, ...]) -> None:
-    """下载指定 Artifact 并校验归档（ID 见 firmatlas show，可用前缀）。"""
+    """下载固件并校验归档（接受 list 的发布 ID 或 show 的 Artifact ID，可用前缀）。"""
     data_dir = Path(ctx.obj["data_dir"])
     try:
         engine = database.open_database(data_dir)
@@ -425,18 +425,53 @@ def download_command(ctx: click.Context, artifact_ids: tuple[str, ...]) -> None:
 
 
 def _resolve_artifact(engine, uow_factory, raw_id: str) -> tuple[str, str]:
-    """把（可能是前缀的）Artifact ID 解析为完整 ID，并返回其来源 source_key。"""
+    """把用户输入的 ID（Artifact 或发布，均可为前缀）解析为完整 Artifact ID。
+
+    解析顺序：
+    1. 按 Artifact ID 前缀查——唯一命中即用；
+    2. 未命中则按发布 ID 前缀查（list 输出的是发布 ID）：
+       - 发布下只有 1 个 Artifact → 直接下载它；
+       - 多个 → 列出供选择，要求用户改用 Artifact ID。
+    返回 (artifact_id, source_key)。
+    """
     service = SqliteCatalogQueryService(engine)
+
     matches = service.find_artifact_ids_by_prefix(raw_id)
-    if not matches:
-        raise FirmAtlasError(f"未找到 Artifact {raw_id!r}。")
     if len(matches) > 1:
         raise FirmAtlasError(f"ID 前缀 {raw_id!r} 匹配到 {len(matches)} 条记录，请提供更长的前缀。")
-    artifact_id = matches[0]
+    if len(matches) == 1:
+        return matches[0], _source_key_of(uow_factory, matches[0])
+
+    # 未命中 Artifact：尝试按发布 ID 解析（list 输出的短 ID）
+    release_matches = service.find_release_ids_by_prefix(raw_id)
+    if not release_matches:
+        raise FirmAtlasError(f"未找到 Artifact 或发布 {raw_id!r}。")
+    if len(release_matches) > 1:
+        raise FirmAtlasError(
+            f"ID 前缀 {raw_id!r} 匹配到 {len(release_matches)} 个发布，请提供更长的前缀。"
+        )
+    detail = service.show_release(release_matches[0])
+    assert detail is not None  # 前缀查询刚命中，不可能不存在
+    if not detail.artifacts:
+        raise FirmAtlasError(f"发布 {raw_id!r} 下没有可下载的 Artifact。")
+    if len(detail.artifacts) > 1:
+        lines = "\n".join(
+            f"  {a.artifact_id}  [{a.artifact_type.value}]  {a.original_filename or '-'}"
+            for a in detail.artifacts
+        )
+        raise FirmAtlasError(
+            f"发布 {raw_id!r} 下有 {len(detail.artifacts)} 个 Artifact，"
+            f"请指定其中一个：\n{lines}"
+        )
+    artifact_id = detail.artifacts[0].artifact_id
+    return artifact_id, _source_key_of(uow_factory, artifact_id)
+
+
+def _source_key_of(uow_factory, artifact_id: str) -> str:
     with uow_factory.begin() as uow:
         ctx = uow.catalog.get_artifact_context(artifact_id)
-    assert ctx is not None  # 前缀查询刚命中，不可能不存在
-    return artifact_id, ctx.source.source_key
+    assert ctx is not None
+    return ctx.source.source_key
 
 
 def _build_refreshing_adapter(source_key: str, client):
