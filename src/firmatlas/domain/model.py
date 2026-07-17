@@ -84,6 +84,44 @@ class OfficialChecksum:
     value: str
 
 
+class DownloadErrorCode(StrEnum):
+    """下载失败原因的稳定枚举（接口设计 §8）。"""
+
+    HTTP_403 = "http_403"
+    HTTP_404 = "http_404"
+    HTTP_410 = "http_410"
+    HTTP_4XX = "http_4xx"
+    HTTP_5XX = "http_5xx"
+    TIMEOUT = "timeout"
+    CONNECTION = "connection"
+    SIZE_MISMATCH = "size_mismatch"
+    INTERRUPTED = "interrupted"
+    UNEXPECTED = "unexpected"
+
+
+@dataclass(frozen=True)
+class DownloadSucceeded:
+    """下载成功的结果。"""
+
+    bytes_received: int
+    sha256: str
+    etag: str | None
+    last_modified: str | None
+
+
+@dataclass(frozen=True)
+class DownloadFailed:
+    """下载失败的结果。bytes_received 为失败前已接收的字节数。"""
+
+    error_code: DownloadErrorCode
+    http_status: int | None
+    detail: str
+    bytes_received: int
+
+
+type DownloadOutcome = DownloadSucceeded | DownloadFailed
+
+
 @dataclass(frozen=True)
 class AdapterIssue:
     """采集过程中的非致命问题，随 CrawlRun 以 JSON 形式落库。"""
