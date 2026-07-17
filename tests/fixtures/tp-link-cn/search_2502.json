@@ -1,0 +1,65 @@
+{
+    "errorCode": 0,
+    "message": "SUCCESS",
+    "result": {
+        "total": 213,
+        "collection": [
+            {
+                "id": 1784097617201826,
+                "category": "SOFTWARE",
+                "title": "TL-R5009PE-AC V1.0\u5347\u7ea7\u8f6f\u4ef620260108_1.0.30",
+                "url": "https://media.tp-link.com.cn/software/TL-R5009PE-AC V1.0\u5347\u7ea7\u8f6f\u4ef620260108_1.0.30.zip",
+                "format": "zip",
+                "softwareType": "UPGRADE_SOFT",
+                "materialCenterState": "SHOW",
+                "docSize": 15074,
+                "modifiedTime": 1784097620182
+            },
+            {
+                "id": 1783413925785097,
+                "category": "SOFTWARE",
+                "title": "TL-ER6229GPE-AC V2.0\u5347\u7ea7\u8f6f\u4ef620240820_3.1.1",
+                "url": "https://media.tp-link.com.cn/software/TL-ER6229GPE-AC V2.0\u5347\u7ea7\u8f6f\u4ef620240820_3.1.1.zip",
+                "format": "zip",
+                "softwareType": "UPGRADE_SOFT",
+                "materialCenterState": "SHOW",
+                "docSize": 15188,
+                "modifiedTime": 1783413928984
+            },
+            {
+                "id": 1782350101074021,
+                "category": "SOFTWARE",
+                "title": "TL-R5005P-AC V1.0\u5347\u7ea7\u8f6f\u4ef620260414_1.0.4",
+                "url": "https://media.tp-link.com.cn/software/TL-R5005P-AC V1.0\u5347\u7ea7\u8f6f\u4ef620260414_1.0.4.zip",
+                "format": "zip",
+                "softwareType": "UPGRADE_SOFT",
+                "materialCenterState": "SHOW",
+                "docSize": 15827,
+                "modifiedTime": 1782350104326
+            },
+            {
+                "id": 1781018713813513,
+                "category": "SOFTWARE",
+                "title": "TL-ER5120T V1.0\u5347\u7ea7\u8f6f\u4ef620260316_1.3.0",
+                "url": "https://media.tp-link.com.cn/software/TL-ER5120T V1.0\u5347\u7ea7\u8f6f\u4ef620260316_1.3.0.zip",
+                "format": "zip",
+                "softwareType": "UPGRADE_SOFT",
+                "materialCenterState": "SHOW",
+                "docSize": 21916,
+                "modifiedTime": 1781018717951
+            },
+            {
+                "id": 1779373806327155,
+                "category": "SOFTWARE",
+                "title": "TL-R470GP-AC V9.0\u5347\u7ea7\u8f6f\u4ef620260331_1.0.17",
+                "url": "https://media.tp-link.com.cn/software/TL-R470GP-AC V9.0\u5347\u7ea7\u8f6f\u4ef620260331_1.0.17.zip",
+                "format": "zip",
+                "softwareType": "UPGRADE_SOFT",
+                "materialCenterState": "SHOW",
+                "docSize": 16772,
+                "modifiedTime": 1779373809590
+            }
+        ],
+        "type": 2
+    }
+}

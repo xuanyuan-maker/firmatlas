@@ -1,0 +1,65 @@
+{
+    "errorCode": 0,
+    "message": "SUCCESS",
+    "result": {
+        "total": 85,
+        "collection": [
+            {
+                "id": 1783692615733738,
+                "category": "SOFTWARE",
+                "title": "TL-IPC14B V1.0\u5347\u7ea7\u8f6f\u4ef620260615_1.0.21",
+                "url": "https://media.tp-link.com.cn/software/TL-IPC14B V1.0\u5347\u7ea7\u8f6f\u4ef620260615_1.0.21.zip",
+                "format": "zip",
+                "softwareType": "UPGRADE_SOFT",
+                "materialCenterState": "SHOW",
+                "docSize": 12491,
+                "modifiedTime": 1783692618187
+            },
+            {
+                "id": 1782826201859788,
+                "category": "SOFTWARE",
+                "title": "TL-IPC48AW \u53cc\u6a21\u7248 V1.0\u5347\u7ea7\u8f6f\u4ef620260618_1.0.7",
+                "url": "https://media.tp-link.com.cn/software/TL-IPC48AW \u53cc\u6a21\u7248 V1.0\u5347\u7ea7\u8f6f\u4ef620260618_1.0.7.zip",
+                "format": "zip",
+                "softwareType": "UPGRADE_SOFT",
+                "materialCenterState": "SHOW",
+                "docSize": 13254,
+                "modifiedTime": 1782826204470
+            },
+            {
+                "id": 1782461410787597,
+                "category": "SOFTWARE",
+                "title": "TL-IPC48AN \u53cc\u76ee\u53d8\u7126\u7248 V1.0\u5347\u7ea7\u8f6f\u4ef620260527_1.0.4",
+                "url": "https://media.tp-link.com.cn/software/TL-IPC48AN \u53cc\u76ee\u53d8\u7126\u7248 V1.0\u5347\u7ea7\u8f6f\u4ef620260527_1.0.4.zip",
+                "format": "zip",
+                "softwareType": "UPGRADE_SOFT",
+                "materialCenterState": "SHOW",
+                "docSize": 11718,
+                "modifiedTime": 1782461413109
+            },
+            {
+                "id": 1782461408329120,
+                "category": "SOFTWARE",
+                "title": "TL-IPC45AN \u53cc\u76ee\u53d8\u7126\u7248 V1.0\u5347\u7ea7\u8f6f\u4ef620260527_1.0.5",
+                "url": "https://media.tp-link.com.cn/software/TL-IPC45AN \u53cc\u76ee\u53d8\u7126\u7248 V1.0\u5347\u7ea7\u8f6f\u4ef620260527_1.0.5.zip",
+                "format": "zip",
+                "softwareType": "UPGRADE_SOFT",
+                "materialCenterState": "SHOW",
+                "docSize": 11381,
+                "modifiedTime": 1782461410646
+            },
+            {
+                "id": 1773664520119424,
+                "category": "SOFTWARE",
+                "title": "TL-IPC689XD-A4 V1.0/V2.0/V2.1\u5347\u7ea7\u8f6f\u4ef620260226_1.0.20",
+                "url": "https://media.tp-link.com.cn/software/TL-IPC689XD-A4 V1.0_V2.0_V2.1\u5347\u7ea7\u8f6f\u4ef620260226_1.0.20.zip",
+                "format": "zip",
+                "softwareType": "UPGRADE_SOFT",
+                "materialCenterState": "SHOW",
+                "docSize": 9966,
+                "modifiedTime": 1773664522219
+            }
+        ],
+        "type": 2
+    }
+}
