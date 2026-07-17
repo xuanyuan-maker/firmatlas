@@ -36,7 +36,7 @@ cellular_cpe）和摄像头（camera）。因此采集前必须过滤。
 - `mesh_router`：TP-Link 易展（EasyMesh）产品分散在 2501 与 2502
   （如 TL-R5408M「2.5G 易展 VPN 路由器」）。**本轮对型号或产品名含「易展」
   的记录一律返回 None 跳过**（2026-07-17 用户决策：宁缺勿错，避免先以
-  home_router 错误入库、mesh 专项回补时再修存量数据）。
+  router 错误入库、mesh 专项回补时再修存量数据）。
 
 在这两项补齐前，MVP 五类中的 wireless_ap / mesh_router 不会被产出（AC-06 缺口）。
 
@@ -144,7 +144,7 @@ def classify(
     """
     key = product_class_id.strip()
 
-    # 易展（mesh）产品本轮统一跳过：宁缺勿错，避免以 home_router 错误入库。
+    # 易展（mesh）产品本轮统一跳过：宁缺勿错，避免以 router 错误入库。
     if _EASYMESH_HINT in model or _EASYMESH_HINT in product_name:
         return None
 

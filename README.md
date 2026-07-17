@@ -61,7 +61,7 @@
 
    | 产品大类 | 标准类型       | 说明                       | 示例                  |
    | -------- | -------------- | -------------------------- | --------------------- |
-   | `router` | `home_router`  | 家用有线路由器或无线路由器 | Archer 系列           |
+   | `router` | `router`       | 有线路由器或无线路由器（含家用及企业级）| Archer / ER / NR / SAR 系列 |
    | `router` | `mesh_router`  | 家庭 Mesh 组网设备         | Deco 系列             |
    | `router` | `wireless_ap`  | 家用或小型网络无线接入点   | Wireless AP           |
    | `router` | `cellular_cpe` | 使用移动网络接入的路由设备 | 4G/5G CPE、移动路由器 |
@@ -718,7 +718,7 @@
    分类组合：
 
    ```text
-   router -> home_router | mesh_router | wireless_ap | cellular_cpe
+   router -> router | mesh_router | wireless_ap | cellular_cpe
    camera -> camera
    ```
 
@@ -1017,7 +1017,7 @@
    
    firmatlas list \
        --source tp-link-cn \
-       --type home_router \
+       --type router \
        --model "Archer AX23"
    
    firmatlas show <release-id> --format json

@@ -158,7 +158,7 @@ def test_industrial_edge_gateway_is_rejected() -> None:
 
 def test_easymesh_in_model_is_skipped() -> None:
     # 实测 2502 内的易展产品：先跳过，mesh 专项时统一收，避免以
-    # home_router 错误入库后再修存量。
+    # router 错误入库后再修存量。
     assert classify("2502", "TL-XVR5400G-5G易展版") is None
 
 
