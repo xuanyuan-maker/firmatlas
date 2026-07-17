@@ -87,7 +87,7 @@ def test_list_returns_all_without_filter(
     assert page.total == 2
     assert {row.model for row in page.rows} == {"TL-WR841N", "TL-IPC44AW"}
     row = next(r for r in page.rows if r.model == "TL-WR841N")
-    assert row.product_type is ProductType.HOME_ROUTER
+    assert row.product_type is ProductType.ROUTER
     assert row.hardware == "v14"
     assert row.artifact_count == 1
     assert row.visibility is VisibilityStatus.ACTIVE
@@ -218,7 +218,7 @@ def test_cli_list_table_and_filters(tmp_path, monkeypatch, make_product_candidat
     result = runner.invoke(cli, ["--data-dir", data, "list"])
     assert result.exit_code == 0, result.output
     assert "TL-WR841N" in result.output
-    assert "home_router" in result.output
+    assert "router" in result.output
 
     result = runner.invoke(cli, ["--data-dir", data, "list", "--type", "camera"])
     assert result.exit_code == 0

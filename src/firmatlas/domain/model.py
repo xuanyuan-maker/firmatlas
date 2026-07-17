@@ -23,7 +23,7 @@ class ProductFamily(StrEnum):
 
 
 class ProductType(StrEnum):
-    HOME_ROUTER = "home_router"
+    ROUTER = "router"
     MESH_ROUTER = "mesh_router"
     WIRELESS_AP = "wireless_ap"
     CELLULAR_CPE = "cellular_cpe"

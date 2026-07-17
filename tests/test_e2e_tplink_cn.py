@@ -81,7 +81,7 @@ def test_e2e_crawl_to_query(engine, uow_factory, seeded_source):
     # 路由器与摄像头两类都应入库
     types = {row.product_type for row in page.rows}
     assert ProductType.CAMERA in types
-    assert types & {ProductType.HOME_ROUTER, ProductType.CELLULAR_CPE}
+    assert types & {ProductType.ROUTER, ProductType.CELLULAR_CPE}
 
     # show 任一发布：所属链完整、Artifact 有下载地址
     detail = service.show_release(page.rows[0].release_id)

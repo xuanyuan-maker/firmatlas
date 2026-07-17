@@ -105,11 +105,11 @@ def test_4g5g_class_tr_routers_map_to_cellular_cpe(model: str) -> None:
     "model",
     ["TL-R5009PE-AC", "TL-ER6229GPE-AC", "TL-WVR1300G"],
 )
-def test_router_default_is_home_router(model: str) -> None:
+def test_router_default_is_router(model: str) -> None:
     result = classify("2502", model)
     assert result is not None
     assert result.family is ProductFamily.ROUTER
-    assert result.product_type is ProductType.HOME_ROUTER
+    assert result.product_type is ProductType.ROUTER
 
 
 def test_router_cellular_by_model_4g() -> None:
@@ -131,21 +131,21 @@ def test_model_5g_alone_no_longer_triggers_cellular() -> None:
     # 不是蜂窝语义，单看型号 5G 不再触发 cellular_cpe（第一轮的误判修复）。
     result = classify("2502", "TL-NR700-4C-5G", "高性能全千兆企业路由器")
     assert result is not None
-    assert result.product_type is ProductType.HOME_ROUTER
+    assert result.product_type is ProductType.ROUTER
 
 
 def test_name_5g_with_wifi_context_is_not_cellular() -> None:
     # 产品名含 5G 但处于 Wi-Fi 语境（AX 速率）→ 指 5GHz 频段，不是蜂窝。
     result = classify("2502", "TL-XVR5400G", "企业级5G/AX5400 Wi-Fi 6 无线路由器")
     assert result is not None
-    assert result.product_type is ProductType.HOME_ROUTER
+    assert result.product_type is ProductType.ROUTER
 
 
 def test_name_2dot5g_port_speed_is_not_cellular() -> None:
     # 「2.5G」是网口速率，不得触发蜂窝判定。
     result = classify("2502", "TL-R5408", "2.5G VPN路由器")
     assert result is not None
-    assert result.product_type is ProductType.HOME_ROUTER
+    assert result.product_type is ProductType.ROUTER
 
 
 def test_industrial_edge_gateway_is_rejected() -> None:

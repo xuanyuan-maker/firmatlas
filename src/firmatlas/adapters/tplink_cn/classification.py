@@ -3,7 +3,7 @@
 ## 这个模块解决什么问题
 
 TP-Link 资料中心（resource.tp-link.com.cn）把所有品类的升级软件混在一个列表里。
-README 0x02 限定 MVP 只采集路由器类（home_router/mesh_router/wireless_ap/
+README 0x02 限定 MVP 只采集路由器类（router/mesh_router/wireless_ap/
 cellular_cpe）和摄像头（camera）。因此采集前必须过滤。
 
 **实测（2026-07-16/17 两轮）发现纯品类白名单不成立**，因此改用两级过滤：
@@ -177,7 +177,7 @@ def classify(
         product_type = (
             ProductType.CELLULAR_CPE
             if _is_cellular(model, product_name)
-            else ProductType.HOME_ROUTER
+            else ProductType.ROUTER
         )
         return Classification(
             product_class_id=key,

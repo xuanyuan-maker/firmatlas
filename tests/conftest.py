@@ -145,7 +145,7 @@ def make_product_candidate(make_revision_candidate):
             "model_normalized": "tl-wr841n",
             "series": "TL-WR",
             "product_family": ProductFamily.ROUTER,
-            "product_type": ProductType.HOME_ROUTER,
+            "product_type": ProductType.ROUTER,
             "source_category": "无线路由器",
             "source_url": "https://example.com/product/wr841n",
             "hardware_revisions": (make_revision_candidate(),),

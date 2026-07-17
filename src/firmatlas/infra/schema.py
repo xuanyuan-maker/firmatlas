@@ -80,7 +80,7 @@ products = Table(
     # 分类组合约束：router 只能配四种路由器类型，camera 只能配 camera
     CheckConstraint(
         "(product_family = 'router' AND product_type IN "
-        "('home_router', 'mesh_router', 'wireless_ap', 'cellular_cpe'))"
+        "('router', 'mesh_router', 'wireless_ap', 'cellular_cpe'))"
         " OR (product_family = 'camera' AND product_type = 'camera')",
         name="ck_products_family_type",
     ),

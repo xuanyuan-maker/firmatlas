@@ -60,7 +60,7 @@ def product_row(**overrides):
         "model_raw": "Archer AX23",
         "model_normalized": "archer-ax23",
         "product_family": "router",
-        "product_type": "home_router",
+        "product_type": "router",
         "source_url": "https://example.invalid/archer-ax23",
         "first_seen_at": NOW,
         "last_seen_at": NOW,
@@ -177,7 +177,7 @@ def test_product_family_type_combination_check(conn):
     with pytest.raises(sa.exc.IntegrityError):
         conn.execute(
             sa.insert(schema.products),
-            product_row(product_family="camera", product_type="home_router"),
+            product_row(product_family="camera", product_type="router"),
         )
 
 
