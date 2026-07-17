@@ -1,0 +1,86 @@
+{
+  "_note": "裁剪自 https://media.tp-link.com.cn/webresource/managememt/productClassMap.json（2026-07-16 抓取）。仅保留 topProductClassList 的品类树，用于记录白名单所依据的 productClassId 出处。白名单本身在 adapters/tplink_cn/classification.py。",
+  "topProductClassList": [
+    {
+      "name": "视觉安防",
+      "visible": true,
+      "childrens": [
+        { "name": "无线摄像机", "id": "2549" },
+        { "name": "有线摄像机", "id": "2554" },
+        { "name": "球型摄像机", "id": "2559" },
+        { "name": "AI/场景摄像机", "id": "2600" },
+        { "name": "鹰眼系统", "id": "2610" },
+        { "name": "NVR", "id": "2612" },
+        { "name": "视频管理服务器", "id": "2617" },
+        { "name": "解码和显示", "id": "2620" },
+        { "name": "太阳能产品", "id": "2627" },
+        { "name": "4G/5G产品", "id": "2631" },
+        { "name": "配件", "id": "2634" }
+      ]
+    },
+    {
+      "name": "网络设备",
+      "visible": true,
+      "childrens": [
+        { "name": "无线网络", "id": "2501" },
+        { "name": "路由器", "id": "2502" },
+        { "name": "交换机", "id": "2503" },
+        { "name": "全光网络", "id": "2504" },
+        { "name": "网络安全", "id": "2527" },
+        { "name": "综合布线", "id": "2532" },
+        { "name": "域联系列", "id": "2539" },
+        { "name": "其他", "id": "2546" }
+      ]
+    },
+    {
+      "name": "工业控制",
+      "visible": true,
+      "childrens": [
+        { "name": "工业交换机", "id": "2642" },
+        { "name": "工业无线", "id": "2650" },
+        { "name": "工业路由及网络安全", "id": "2654" },
+        { "name": "协议网关及串口服务器", "id": "2659" },
+        { "name": "工业视觉", "id": "2664" },
+        { "name": "工控机", "id": "2755" },
+        { "name": "工业管理系统", "id": "2672" },
+        { "name": "工业机器人", "id": "2793" },
+        { "name": "工业电源及配件", "id": "2673" }
+      ]
+    },
+    {
+      "name": "智能系统",
+      "visible": true,
+      "childrens": [
+        { "name": "网络广播", "id": "2677" },
+        { "name": "门禁对讲", "id": "2684" },
+        { "name": "智慧停车", "id": "2685" },
+        { "name": "充电桩", "id": "2686" },
+        { "name": "智能家居", "id": "2687" },
+        { "name": "智能显示", "id": "2688" },
+        { "name": "照明控制", "id": "2689" },
+        { "name": "传感器", "id": "2690" }
+      ]
+    },
+    {
+      "name": "平台与软件",
+      "visible": true,
+      "childrens": [
+        { "name": "管理系统", "id": "2691" },
+        { "name": "开放平台", "id": "2694" },
+        { "name": "软件应用", "id": "2692" },
+        { "name": "云服务", "id": "2693" }
+      ]
+    },
+    {
+      "name": "存储与计算",
+      "visible": true,
+      "childrens": [
+        { "name": "通用存储", "id": "2695" },
+        { "name": "视频存储", "id": "2696" },
+        { "name": "硬盘", "id": "2697" },
+        { "name": "服务器", "id": "2698" },
+        { "name": "云桌面", "id": "2699" }
+      ]
+    }
+  ]
+}
