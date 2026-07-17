@@ -1,0 +1,67 @@
+"""来源注册表：内置来源种子与适配器构造映射。
+
+这是全项目唯一"认识所有适配器"的地方：
+- SEED_SOURCES：`firmatlas init` 幂等写入 sources 表的内置来源；
+- build_adapter()：CLI crawl 命令按 source_key 构造对应适配器。
+
+新增来源（如阶段 5 的 tp-link-us）时在这两处各加一条即可。
+"""
+
+from __future__ import annotations
+
+from firmatlas.adapters.tplink_cn.adapter import TplinkCnAdapter
+from firmatlas.app.crawl import SourceAdapter
+from firmatlas.domain.errors import FirmAtlasError
+from firmatlas.domain.ids import new_id
+from firmatlas.domain.model import DiscoveryMethod, FirmwareSource
+from firmatlas.domain.timeutil import utc_now
+from firmatlas.infra.http_client import HttpFetcher
+
+
+class UnsupportedSourceError(FirmAtlasError):
+    """source_key 没有对应的适配器实现。"""
+
+
+def seed_sources() -> list[FirmwareSource]:
+    """内置来源列表（id 每次新生成；ensure_seed_sources 按 source_key 幂等跳过已有行）。"""
+    now = utc_now()
+    return [
+        FirmwareSource(
+            id=new_id(),
+            vendor_key="tp-link",
+            vendor_name="TP-Link",
+            source_key="tp-link-cn",
+            name="TP-Link 中国官网资料中心",
+            region_code="CN",
+            locale="zh-CN",
+            base_url="https://resource.tp-link.com.cn/",
+            adapter_key="tplink_cn",
+            discovery_method=DiscoveryMethod.API,
+            enabled=True,
+            created_at=now,
+            updated_at=now,
+        ),
+    ]
+
+
+# source_key → 接收 HttpFetcher、返回适配器的构造函数
+_ADAPTER_BUILDERS = {
+    "tp-link-cn": TplinkCnAdapter,
+}
+
+
+def supported_source_keys() -> list[str]:
+    return sorted(_ADAPTER_BUILDERS)
+
+
+def check_supported(source_key: str) -> None:
+    """source_key 无对应适配器时抛 UnsupportedSourceError（供 CLI 在建 HTTP 客户端前校验）。"""
+    if source_key not in _ADAPTER_BUILDERS:
+        raise UnsupportedSourceError(
+            f"不支持的来源 {source_key!r}，可用来源：{', '.join(supported_source_keys())}"
+        )
+
+
+def build_adapter(source_key: str, http: HttpFetcher) -> SourceAdapter:
+    check_supported(source_key)
+    return _ADAPTER_BUILDERS[source_key](http)
