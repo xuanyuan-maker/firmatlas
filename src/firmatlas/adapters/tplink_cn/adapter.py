@@ -280,19 +280,26 @@ class TplinkCnAdapter:
                         title=first.title,
                         release_notes=None,
                         release_notes_url=None,
-                        source_url=first.download_url,
+                        source_url=(
+                            f"https://resource.tp-link.com.cn/pc/docCenter/"
+                            f"showDoc?id={first.api_id}"
+                        ),
                         artifacts=artifact_candidates,
                     )
                 )
 
             hw_source_key = _make_hw_source_key(tree.model_normalized, hw_norm)
+            # 取该硬件版本下第一个发布的第一个 artifact 的详情页作为硬件版本来源
+            hw_source_url = None
+            if release_candidates:
+                hw_source_url = release_candidates[0].source_url
             hw_candidates.append(
                 HardwareRevisionCandidate(
                     source_key=hw_source_key,
                     raw_revision=f"V{hw_node.raw}",
                     normalized_revision=hw_norm,
                     revision_explicit=True,
-                    source_url=None,
+                    source_url=hw_source_url,
                     releases=tuple(release_candidates),
                 )
             )
