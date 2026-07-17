@@ -42,11 +42,14 @@ class Downloader:
         dest: Path,
         expected_size: int | None = None,
         on_progress: Callable[[int], None] | None = None,
+        referer: str | None = None,
     ) -> DownloadOutcome:
         """流式下载到 dest（必须是 data/tmp/downloads/ 下的临时路径）。
 
         SHA-256 在接收过程中累计算，不需要下载完成后重读文件。
         on_progress 在接收过程中按 ~256 KiB 节流回调（累计字节数）。
+        referer 非空时随请求发送 Referer 头（部分厂商下载服务器
+        校验 Referer，缺失即 403，如 service.tp-link.com.cn）。
 
         调用方负责：
         - 确保 dest 的父目录存在
@@ -60,6 +63,8 @@ class Downloader:
         headers = {
             "User-Agent": "FirmAtlas/0.1",
         }
+        if referer is not None:
+            headers["Referer"] = referer
 
         try:
             async with self._client.stream(

@@ -64,6 +64,7 @@ class DownloaderPort(Protocol):
         dest: Path,
         expected_size: int | None = None,
         on_progress: Callable[[int], None] | None = None,
+        referer: str | None = None,
     ) -> DownloadOutcome: ...
 
 
@@ -141,12 +142,15 @@ async def download_artifact(
         )
 
     # --- 下载（进度节流落库）---------------------------------------------
+    # Referer 用来源站点根地址：部分厂商下载服务器校验 Referer，缺失即 403
+    referer = ctx.source.base_url
     progress = _ProgressWriter(uow_factory=uow_factory, download_id=record.id)
     outcome = await downloader.download(
         url=url,
         dest=tmp_path,
         expected_size=ctx.artifact.advertised_size,
         on_progress=progress,
+        referer=referer,
     )
 
     # --- 失效地址刷新：最多一次（AC-29）----------------------------------
@@ -183,6 +187,7 @@ async def download_artifact(
                 dest=tmp_path,
                 expected_size=ctx.artifact.advertised_size,
                 on_progress=progress,
+                referer=referer,
             )
         else:
             refresh_note = f"地址刷新失败（{refresh_result.reason_code}）: {refresh_result.detail}"

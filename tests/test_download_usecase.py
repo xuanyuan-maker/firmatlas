@@ -49,9 +49,13 @@ class ScriptedDownloader:
     def __init__(self, outcomes: list[DownloadSucceeded | DownloadFailed]) -> None:
         self._outcomes = list(outcomes)
         self.calls: list[str] = []  # 记录每次调用的 URL
+        self.referers: list[str | None] = []  # 记录每次调用收到的 referer
 
-    async def download(self, *, url, dest: Path, expected_size=None, on_progress=None):
+    async def download(
+        self, *, url, dest: Path, expected_size=None, on_progress=None, referer=None
+    ):
         self.calls.append(url)
+        self.referers.append(referer)
         outcome = self._outcomes.pop(0)
         if isinstance(outcome, DownloadSucceeded):
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -203,6 +207,8 @@ def test_success_without_official_checksum(uow_factory, seeded_artifact_id, data
     assert report.verification_status is VerificationStatus.NOT_AVAILABLE
     assert report.sha256 == CONTENT_SHA256
     assert report.final_relative_path is not None
+    # 下载用例把来源站点根地址作为 Referer 传给下载器（部分厂商校验 Referer）
+    assert downloader.referers == ["https://www.tp-link.com.cn/"]
     # 归档文件真实存在且内容一致
     final = data_dir / report.final_relative_path
     assert final.read_bytes() == CONTENT
@@ -366,6 +372,11 @@ def test_404_triggers_refresh_then_success(uow_factory, seeded_artifact_id, data
     assert downloader.calls == [
         "https://example.com/fw/TL-WR841N_v14.zip",
         "https://example.com/fw/new-url.zip",
+    ]
+    # 两次下载（原始 + 刷新重试）都带上了来源站点 Referer
+    assert downloader.referers == [
+        "https://www.tp-link.com.cn/",
+        "https://www.tp-link.com.cn/",
     ]
     # 刷新请求带上了 Artifact 身份
     assert len(adapter.requests) == 1

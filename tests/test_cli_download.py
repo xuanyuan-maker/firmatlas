@@ -47,7 +47,9 @@ class ScriptedDownloader:
     def __init__(self, client):
         pass
 
-    async def download(self, *, url, dest: Path, expected_size=None, on_progress=None):
+    async def download(
+        self, *, url, dest: Path, expected_size=None, on_progress=None, referer=None
+    ):
         outcome = ScriptedDownloader.outcomes.pop(0)
         if isinstance(outcome, DownloadSucceeded):
             dest.parent.mkdir(parents=True, exist_ok=True)

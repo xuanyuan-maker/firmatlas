@@ -178,19 +178,21 @@ def test_promote_moves_file_atomically(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _serve_file(tmp_path: Path, content: bytes, status: int = 200) -> int:
-    """在随机端口启动一个临时 HTTP 服务器（线程），返回端口号。
+def _serve_file(tmp_path: Path, content: bytes, status: int = 200) -> tuple[int, dict]:
+    """在随机端口启动一个临时 HTTP 服务器（线程），返回 (端口号, 请求头记录)。
 
-    服务器只处理一个请求然后关闭。
+    服务器只处理一个请求然后关闭；收到的请求头写入返回的 dict。
     """
     file_path = tmp_path / "test_firmware.bin"
     file_path.write_bytes(content)
 
     ready = threading.Event()
     result: dict = {"port": 0}
+    seen_headers: dict = {}
 
     class _Handler(SimpleHTTPRequestHandler):
         def do_GET(self):
+            seen_headers.update(dict(self.headers))
             body = file_path.read_bytes()
             self.send_response(status)
             self.send_header("Content-Length", str(len(body)))
@@ -212,13 +214,13 @@ def _serve_file(tmp_path: Path, content: bytes, status: int = 200) -> int:
     t = threading.Thread(target=_run, daemon=True)
     t.start()
     ready.wait(timeout=2)
-    return result["port"]
+    return result["port"], seen_headers
 
 
 @pytest.mark.anyio
 async def test_download_success(tmp_path):
     content = b"x" * (256 * 1024 + 100)  # 略大于进度阈值，触发一次 on_progress
-    port = _serve_file(tmp_path, content)
+    port, seen_headers = _serve_file(tmp_path, content)
     expected_sha = hashlib.sha256(content).hexdigest()
 
     async with httpx.AsyncClient() as client:
@@ -229,6 +231,7 @@ async def test_download_success(tmp_path):
             url=f"http://127.0.0.1:{port}/test_firmware.bin",
             dest=tmp_path / "downloads" / "test_result.bin",
             on_progress=lambda n: progress_values.append(n),
+            referer="https://resource.example.com/",
         )
 
     assert isinstance(outcome, DownloadSucceeded)
@@ -238,11 +241,29 @@ async def test_download_success(tmp_path):
     assert outcome.last_modified == "Wed, 21 Oct 2015 07:28:00 GMT"
     assert len(progress_values) >= 1
     assert (tmp_path / "downloads" / "test_result.bin").read_bytes() == content
+    # Referer 头随请求发出（部分厂商下载服务器校验 Referer）
+    assert seen_headers.get("Referer") == "https://resource.example.com/"
+
+
+@pytest.mark.anyio
+async def test_download_without_referer_sends_no_header(tmp_path):
+    """未传 referer 时不发送 Referer 头。"""
+    port, seen_headers = _serve_file(tmp_path, b"data")
+
+    async with httpx.AsyncClient() as client:
+        downloader = Downloader(client)
+        outcome = await downloader.download(
+            url=f"http://127.0.0.1:{port}/test_firmware.bin",
+            dest=tmp_path / "downloads" / "noref.bin",
+        )
+
+    assert isinstance(outcome, DownloadSucceeded)
+    assert "Referer" not in seen_headers
 
 
 @pytest.mark.anyio
 async def test_download_http_404(tmp_path):
-    port = _serve_file(tmp_path, b"error", status=404)
+    port, _ = _serve_file(tmp_path, b"error", status=404)
 
     async with httpx.AsyncClient() as client:
         downloader = Downloader(client)
@@ -258,7 +279,7 @@ async def test_download_http_404(tmp_path):
 
 @pytest.mark.anyio
 async def test_download_http_403(tmp_path):
-    port = _serve_file(tmp_path, b"forbidden", status=403)
+    port, _ = _serve_file(tmp_path, b"forbidden", status=403)
 
     async with httpx.AsyncClient() as client:
         downloader = Downloader(client)
@@ -274,7 +295,7 @@ async def test_download_http_403(tmp_path):
 @pytest.mark.anyio
 async def test_download_size_mismatch(tmp_path):
     content = b"small"
-    port = _serve_file(tmp_path, content)
+    port, _ = _serve_file(tmp_path, content)
 
     async with httpx.AsyncClient() as client:
         downloader = Downloader(client)
