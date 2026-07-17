@@ -15,6 +15,7 @@ import click
 from firmatlas import __version__
 from firmatlas.app import registry
 from firmatlas.app.crawl import CrawlReport, crawl_source
+from firmatlas.app.download import DownloadReport, download_artifact
 from firmatlas.app.queries import OUTPUT_SCHEMA_VERSION, CatalogFilter
 from firmatlas.domain.errors import FirmAtlasError
 from firmatlas.domain.model import (
@@ -25,6 +26,8 @@ from firmatlas.domain.model import (
     VisibilityStatus,
 )
 from firmatlas.infra import database
+from firmatlas.infra.artifact_store import ArtifactStore
+from firmatlas.infra.downloader import Downloader
 from firmatlas.infra.http_client import HttpFetcher, make_http_client
 from firmatlas.infra.query_service import SqliteCatalogQueryService
 from firmatlas.infra.repository import SqliteUnitOfWorkFactory
@@ -366,6 +369,154 @@ def show_command(ctx: click.Context, release_id: str, output_format: str) -> Non
         download = a.last_download_status.value if a.last_download_status else "未下载"
         click.echo(f"    {a.artifact_id}  [{a.artifact_type.value}]  {size}  {download}")
         click.echo(f"      {a.download_url}")
+
+
+@cli.command(name="download")
+@click.argument("artifact_ids", nargs=-1, required=True)
+@click.pass_context
+def download_command(ctx: click.Context, artifact_ids: tuple[str, ...]) -> None:
+    """下载指定 Artifact 并校验归档（ID 见 firmatlas show，可用前缀）。"""
+    data_dir = Path(ctx.obj["data_dir"])
+    try:
+        engine = database.open_database(data_dir)
+    except FirmAtlasError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    uow_factory = SqliteUnitOfWorkFactory(engine)
+    store = ArtifactStore(data_dir)
+    failures = 0
+
+    async def _run_all() -> None:
+        nonlocal failures
+        async with make_http_client() as client:
+            downloader = Downloader(client)
+            for raw_id in artifact_ids:
+                try:
+                    artifact_id, source_key = _resolve_artifact(engine, uow_factory, raw_id)
+                except FirmAtlasError as exc:
+                    failures += 1
+                    click.echo(f"{raw_id}: {exc}", err=True)
+                    continue
+                adapter = _build_refreshing_adapter(source_key, client)
+                try:
+                    report = await download_artifact(
+                        artifact_id=artifact_id,
+                        uow_factory=uow_factory,
+                        downloader=downloader,
+                        store=store,
+                        data_dir=data_dir,
+                        adapter=adapter,
+                    )
+                except FirmAtlasError as exc:
+                    failures += 1
+                    click.echo(f"{artifact_id}: {exc}", err=True)
+                    continue
+                _echo_download_report(report)
+                if report.status is not DownloadStatus.COMPLETED:
+                    failures += 1
+
+    try:
+        asyncio.run(_run_all())
+    finally:
+        engine.dispose()
+
+    if failures:
+        raise SystemExit(1)
+
+
+def _resolve_artifact(engine, uow_factory, raw_id: str) -> tuple[str, str]:
+    """把（可能是前缀的）Artifact ID 解析为完整 ID，并返回其来源 source_key。"""
+    service = SqliteCatalogQueryService(engine)
+    matches = service.find_artifact_ids_by_prefix(raw_id)
+    if not matches:
+        raise FirmAtlasError(f"未找到 Artifact {raw_id!r}。")
+    if len(matches) > 1:
+        raise FirmAtlasError(f"ID 前缀 {raw_id!r} 匹配到 {len(matches)} 条记录，请提供更长的前缀。")
+    artifact_id = matches[0]
+    with uow_factory.begin() as uow:
+        ctx = uow.catalog.get_artifact_context(artifact_id)
+    assert ctx is not None  # 前缀查询刚命中，不可能不存在
+    return artifact_id, ctx.source.source_key
+
+
+def _build_refreshing_adapter(source_key: str, client):
+    """来源有适配器且实现了地址刷新时返回适配器，否则返回 None（下载仍可进行）。"""
+    try:
+        adapter = registry.build_adapter(source_key, HttpFetcher(client))
+    except FirmAtlasError:
+        return None
+    return adapter if hasattr(adapter, "refresh_artifact_url") else None
+
+
+def _echo_download_report(report: DownloadReport) -> None:
+    if report.status is DownloadStatus.COMPLETED:
+        verified = {
+            VerificationStatus.VERIFIED: "官方校验和一致",
+            VerificationStatus.NOT_AVAILABLE: "无官方校验和",
+        }.get(report.verification_status, report.verification_status.value)
+        click.echo(f"{report.artifact_id}: 下载完成（{report.bytes_received} B，{verified}）")
+        click.echo(f"  SHA-256：{report.sha256}")
+        click.echo(f"  归档位置：{report.final_relative_path}")
+    else:
+        click.echo(
+            f"{report.artifact_id}: 下载失败（{report.status.value}"
+            f"，错误 {report.error_code}）",
+            err=True,
+        )
+        if report.error_message:
+            click.echo(f"  {report.error_message}", err=True)
+    if report.url_refreshed:
+        click.echo("  （下载地址已自动刷新一次）")
+
+
+@cli.command(name="downloads")
+@click.option(
+    "--status", default=None, type=click.Choice([e.value for e in DownloadStatus]),
+    help="按状态筛选。",
+)
+@click.option("--artifact", "artifact_id", default=None, help="只看指定 Artifact 的记录。")
+@click.option("--limit", default=20, show_default=True, help="最多显示条数。")
+@click.pass_context
+def downloads_command(
+    ctx: click.Context, status: str | None, artifact_id: str | None, limit: int
+) -> None:
+    """列出下载历史（最新在前）。"""
+    data_dir = Path(ctx.obj["data_dir"])
+    try:
+        engine = database.open_database(data_dir)
+    except FirmAtlasError as exc:
+        raise click.ClickException(str(exc)) from exc
+    try:
+        with SqliteUnitOfWorkFactory(engine).begin() as uow:
+            records = uow.downloads.list_downloads(
+                status=DownloadStatus(status) if status else None,
+                artifact_id=artifact_id,
+                limit=limit,
+            )
+    finally:
+        engine.dispose()
+
+    if not records:
+        click.echo("暂无下载记录。")
+        return
+    headers = ("下载ID", "ARTIFACT", "状态", "校验", "字节数", "发起时间")
+    table = [
+        (
+            r.id[:8],
+            r.artifact_id[:8],
+            r.status.value,
+            r.verification_status.value,
+            str(r.bytes_received),
+            r.requested_at.isoformat(),
+        )
+        for r in records
+    ]
+    _echo_table(headers, table)
+    for r in records:
+        if r.status is DownloadStatus.COMPLETED and r.final_relative_path:
+            click.echo(f"{r.id[:8]}  → {r.final_relative_path}")
+        elif r.error_message:
+            click.echo(f"{r.id[:8]}  ✗ {r.error_message}")
 
 
 def _jsonable(value: object) -> object:

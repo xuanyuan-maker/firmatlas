@@ -130,3 +130,7 @@ class CatalogQueryService(Protocol):
     def find_release_ids_by_prefix(self, prefix: str, *, limit: int = 5) -> list[str]:
         """按 ID 前缀查找发布（list 输出短 ID，show 支持前缀输入）。"""
         ...
+
+    def find_artifact_ids_by_prefix(self, prefix: str, *, limit: int = 5) -> list[str]:
+        """按 ID 前缀查找 Artifact（download 支持 show 输出的完整/前缀 ID）。"""
+        ...

@@ -176,6 +176,16 @@ class SqliteCatalogQueryService:
         with self._engine.connect() as conn:
             return [row.id for row in conn.execute(stmt)]
 
+    def find_artifact_ids_by_prefix(self, prefix: str, *, limit: int = 5) -> list[str]:
+        """按 ID 前缀查找 Artifact ID（download 支持 show 输出的完整/前缀 ID）。"""
+        stmt = (
+            sa.select(_A.c.id)
+            .where(_A.c.id.like(f"{_escape_like(prefix)}%", escape="\\"))
+            .limit(limit)
+        )
+        with self._engine.connect() as conn:
+            return [row.id for row in conn.execute(stmt)]
+
     # -- show ------------------------------------------------------------
 
     def show_release(self, release_id: str) -> ReleaseDetail | None:
