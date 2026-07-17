@@ -21,8 +21,13 @@ from __future__ import annotations
 
 from firmatlas.adapters.events import (
     AdapterIssueSummary,
+    ArtifactRefreshFailed,
+    ArtifactRefreshRequest,
+    ArtifactRefreshResult,
+    ArtifactUrlRefreshed,
     DiscoveredProduct,
     DiscoveryCompleted,
+    RefreshFailureReason,
     SkippedCandidate,
     SkipReason,
 )
@@ -315,6 +320,88 @@ class TplinkCnAdapter:
             source_category=cls.product_class_name,
             source_url=_RESOURCE_CENTER_URL,
             hardware_revisions=tuple(hw_candidates),
+        )
+
+
+    # -- refresh_artifact_url --------------------------------------------
+
+    async def refresh_artifact_url(
+        self, request: ArtifactRefreshRequest
+    ) -> ArtifactRefreshResult:
+        """按产品型号重新搜索，找回 source_key（API 记录 id）相同的记录的最新地址。
+
+        tp-link-cn 的 Artifact source_key 就是搜索 API 的记录 id（厂商稳定 ID），
+        因此身份匹配即 id 相等；id 找不到视为来源已下架（NOT_FOUND）。
+        """
+        # product_source_key 是规范化型号（如 "TL-R5009PE-AC"），直接作搜索关键词
+        keyword = request.product_source_key
+        page_index = 1
+        total = 1
+
+        while (page_index - 1) * _PAGE_SIZE < total:
+            try:
+                fetched = await self._http.post_json(
+                    _SEARCH_URL,
+                    body={
+                        "crossFilter": [
+                            {
+                                "filterClassIds": [],
+                                "category": "SOFTWARE",
+                                "documentTypes": [],
+                                "softwareTypes": ["UPGRADE_SOFT"],
+                            }
+                        ],
+                        "formats": ["zip"],
+                        "productClassIds": [],
+                        "pageIndex": page_index,
+                        "pageSize": _PAGE_SIZE,
+                        "sortOrder": "DEFAULT",
+                        "orderDirection": "DESC",
+                        "isMaterial": True,
+                        "keyword": keyword,
+                        "tagIds": None,
+                    },
+                    headers={"Referer": _RESOURCE_CENTER_URL},
+                )
+            except Exception as exc:
+                return ArtifactRefreshFailed(
+                    reason_code=RefreshFailureReason.SOURCE_ERROR,
+                    detail=f"搜索 {keyword!r} 请求失败: {exc}",
+                )
+
+            if fetched.status_code != 200:
+                return ArtifactRefreshFailed(
+                    reason_code=RefreshFailureReason.SOURCE_ERROR,
+                    detail=f"搜索 {keyword!r} 返回 HTTP {fetched.status_code}",
+                )
+
+            result = fetched.data.get("result")
+            if not result:
+                break
+
+            total = result.get("total", 0)
+            for record in result.get("collection") or []:
+                if str(record.get("id", "")) != request.artifact_source_key:
+                    continue
+                url = record.get("url", "")
+                if not url:
+                    return ArtifactRefreshFailed(
+                        reason_code=RefreshFailureReason.SOURCE_ERROR,
+                        detail=f"记录 {request.artifact_source_key} 存在但无下载地址",
+                    )
+                return ArtifactUrlRefreshed(
+                    download_url=url,
+                    url_expires_at=None,  # tp-link-cn URL 无显式过期
+                )
+
+            page_index += 1
+
+        return ArtifactRefreshFailed(
+            reason_code=RefreshFailureReason.NOT_FOUND,
+            detail=(
+                f"搜索 {keyword!r} 未找到记录 id={request.artifact_source_key}，"
+                "该固件可能已从来源下架"
+            ),
         )
 
 

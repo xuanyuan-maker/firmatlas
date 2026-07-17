@@ -14,8 +14,12 @@ from typing import Any
 import pytest
 
 from firmatlas.adapters.events import (
+    ArtifactRefreshFailed,
+    ArtifactRefreshRequest,
+    ArtifactUrlRefreshed,
     DiscoveredProduct,
     DiscoveryCompleted,
+    RefreshFailureReason,
     SkippedCandidate,
     SkipReason,
 )
@@ -304,3 +308,149 @@ async def test_doc_size_converted_to_bytes() -> None:
     assert len(products) == 1
     art = products[0].product.hardware_revisions[0].releases[0].artifacts[0]
     assert art.advertised_size == 15074 * 1024
+
+
+# -- 测试：refresh_artifact_url（AC-29）--------------------------------------
+
+
+class _KeywordMockFetcher:
+    """按 keyword 回放搜索结果的虚拟 HttpFetcher（刷新走关键词搜索）。"""
+
+    def __init__(self, responses: dict[str, Any], status_code: int = 200) -> None:
+        self._responses = responses
+        self._status_code = status_code
+        self.calls: list[Any] = []
+
+    async def post_json(self, url: str, body: Any, *, headers=None) -> FetchedJson:
+        self.calls.append(body)
+        key = f"{body.get('keyword', '')}_p{body.get('pageIndex', 1)}"
+        data = self._responses.get(key, {"result": {"total": 0, "collection": []}})
+        return FetchedJson(url=url, status_code=self._status_code, data=data)
+
+
+def _refresh_request(**overrides) -> ArtifactRefreshRequest:
+    fields = {
+        "product_source_key": "TL-R5009PE-AC",
+        "hardware_revision_source_key": "TL-R5009PE-AC/v1.0",
+        "release_source_key": "TL-R5009PE-AC/v1.0/fw1.0.30",
+        "artifact_source_key": "1784097617201826",
+        "stale_url": "https://media.tp-link.com.cn/software/old.zip",
+        "known_filename": "old.zip",
+        "known_size": 15074 * 1024,
+        "known_checksum": None,
+    }
+    fields.update(overrides)
+    return ArtifactRefreshRequest(**fields)
+
+
+def _search_hit(record_id: int, url: str) -> dict:
+    return {
+        "result": {
+            "total": 1,
+            "collection": [
+                {
+                    "id": record_id,
+                    "title": "TL-R5009PE-AC V1.0升级软件20260108_1.0.30",
+                    "url": url,
+                    "format": "zip",
+                    "softwareType": "UPGRADE_SOFT",
+                    "docSize": 15074,
+                }
+            ],
+        }
+    }
+
+
+@pytest.mark.anyio
+async def test_refresh_finds_new_url_by_record_id():
+    new_url = "https://media.tp-link.com.cn/software/new-location.zip"
+    fetcher = _KeywordMockFetcher(
+        {"TL-R5009PE-AC_p1": _search_hit(1784097617201826, new_url)}
+    )
+    adapter = TplinkCnAdapter(fetcher)
+
+    result = await adapter.refresh_artifact_url(_refresh_request())
+
+    assert isinstance(result, ArtifactUrlRefreshed)
+    assert result.download_url == new_url
+    assert result.url_expires_at is None
+    # 搜索关键词是产品型号
+    assert fetcher.calls[0]["keyword"] == "TL-R5009PE-AC"
+
+
+@pytest.mark.anyio
+async def test_refresh_not_found_when_id_missing():
+    """搜索有结果但没有目标 id：NOT_FOUND（固件可能已下架）。"""
+    fetcher = _KeywordMockFetcher(
+        {"TL-R5009PE-AC_p1": _search_hit(9999999, "https://example.com/other.zip")}
+    )
+    adapter = TplinkCnAdapter(fetcher)
+
+    result = await adapter.refresh_artifact_url(_refresh_request())
+
+    assert isinstance(result, ArtifactRefreshFailed)
+    assert result.reason_code is RefreshFailureReason.NOT_FOUND
+
+
+@pytest.mark.anyio
+async def test_refresh_not_found_on_empty_results():
+    fetcher = _KeywordMockFetcher({})
+    adapter = TplinkCnAdapter(fetcher)
+
+    result = await adapter.refresh_artifact_url(_refresh_request())
+
+    assert isinstance(result, ArtifactRefreshFailed)
+    assert result.reason_code is RefreshFailureReason.NOT_FOUND
+
+
+@pytest.mark.anyio
+async def test_refresh_source_error_on_http_status():
+    fetcher = _KeywordMockFetcher({}, status_code=503)
+    adapter = TplinkCnAdapter(fetcher)
+
+    result = await adapter.refresh_artifact_url(_refresh_request())
+
+    assert isinstance(result, ArtifactRefreshFailed)
+    assert result.reason_code is RefreshFailureReason.SOURCE_ERROR
+
+
+@pytest.mark.anyio
+async def test_refresh_source_error_on_exception():
+    class _ExplodingFetcher:
+        async def post_json(self, url, body, *, headers=None):
+            raise RuntimeError("网络错误")
+
+    adapter = TplinkCnAdapter(_ExplodingFetcher())
+
+    result = await adapter.refresh_artifact_url(_refresh_request())
+
+    assert isinstance(result, ArtifactRefreshFailed)
+    assert result.reason_code is RefreshFailureReason.SOURCE_ERROR
+
+
+@pytest.mark.anyio
+async def test_refresh_paginates_to_find_record():
+    """目标记录在第二页：翻页后找到。"""
+    page1 = {
+        "result": {
+            "total": 150,
+            "collection": [
+                {"id": i, "title": f"t{i}", "url": f"https://example.com/{i}.zip"}
+                for i in range(100)
+            ],
+        }
+    }
+    new_url = "https://media.tp-link.com.cn/software/page2.zip"
+    fetcher = _KeywordMockFetcher(
+        {
+            "TL-R5009PE-AC_p1": page1,
+            "TL-R5009PE-AC_p2": _search_hit(1784097617201826, new_url),
+        }
+    )
+    adapter = TplinkCnAdapter(fetcher)
+
+    result = await adapter.refresh_artifact_url(_refresh_request())
+
+    assert isinstance(result, ArtifactUrlRefreshed)
+    assert result.download_url == new_url
+    assert len(fetcher.calls) == 2
