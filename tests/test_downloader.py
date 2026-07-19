@@ -352,6 +352,35 @@ async def test_download_size_beyond_tolerance_fails(tmp_path):
 
 
 @pytest.mark.anyio
+async def test_download_timeout_classified(tmp_path):
+    """下载中 httpx 抛超时 → 归类为 TIMEOUT（而非兜底 INTERRUPTED）。
+
+    用 httpx.MockTransport 注入一个直接抛 ReadTimeout 的处理器：
+    ReadTimeout 是 httpx.TimeoutException 的子类，走的是 downloader
+    里 `except httpx.TimeoutException` 那条分支，与真实读超时同一段代码。
+    好处是瞬间完成、不真等 60 秒读超时、不依赖真实慢服务器。
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("simulated read timeout", request=request)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        downloader = Downloader(client)
+        outcome = await downloader.download(
+            url="http://example.invalid/fw.bin",
+            dest=tmp_path / "downloads" / "timeout.bin",
+        )
+
+    assert isinstance(outcome, DownloadFailed)
+    assert outcome.error_code is DownloadErrorCode.TIMEOUT
+    assert outcome.http_status is None
+    # 未收到任何字节；也不应留下临时文件（下载分支未进入写文件）
+    assert outcome.bytes_received == 0
+    assert not (tmp_path / "downloads" / "timeout.bin").exists()
+
+
+@pytest.mark.anyio
 async def test_download_connection_refused():
     """连接一个不可达端口 → CONNECTION 错误。"""
     async with httpx.AsyncClient() as client:
