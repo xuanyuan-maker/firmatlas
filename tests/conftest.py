@@ -46,6 +46,22 @@ def seeded_source(uow_factory, make_source):
 
 
 @pytest.fixture
+def seeded_us_source(uow_factory, make_source):
+    """预先入库一个 tp-link-us 来源，返回其领域对象。"""
+    source = make_source(
+        source_key="tp-link-us",
+        name="TP-Link 美国站下载中心",
+        region_code="US",
+        locale="en-US",
+        base_url="https://www.tp-link.com/us/",
+        adapter_key="tplink_us",
+    )
+    with uow_factory.begin() as uow:
+        uow.sources.ensure_seed_sources([source])
+    return source
+
+
+@pytest.fixture
 def make_source():
     """构造一个可入库的 FirmwareSource，字段可用关键字参数覆盖。"""
 

@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 from firmatlas.adapters.tplink_cn.adapter import TplinkCnAdapter
+from firmatlas.adapters.tplink_us.adapter import TplinkUsAdapter
 from firmatlas.app.crawl import SourceAdapter
 from firmatlas.domain.errors import FirmAtlasError
 from firmatlas.domain.ids import new_id
@@ -41,12 +42,28 @@ def seed_sources() -> list[FirmwareSource]:
             created_at=now,
             updated_at=now,
         ),
+        FirmwareSource(
+            id=new_id(),
+            vendor_key="tp-link",
+            vendor_name="TP-Link",
+            source_key="tp-link-us",
+            name="TP-Link 美国站下载中心",
+            region_code="US",
+            locale="en-US",
+            base_url="https://www.tp-link.com/us/",
+            adapter_key="tplink_us",
+            discovery_method=DiscoveryMethod.HYBRID,
+            enabled=True,
+            created_at=now,
+            updated_at=now,
+        ),
     ]
 
 
 # source_key → 接收 HttpFetcher、返回适配器的构造函数
 _ADAPTER_BUILDERS = {
     "tp-link-cn": TplinkCnAdapter,
+    "tp-link-us": TplinkUsAdapter,
 }
 
 
