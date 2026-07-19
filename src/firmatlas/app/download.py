@@ -49,6 +49,10 @@ _REFRESHABLE_CODES = frozenset(
 # 再在用例层放大到 4 MiB，避免大文件下载时高频写 SQLite
 _PROGRESS_DB_THRESHOLD = 4 * 1024 * 1024
 
+# 大小校验容差（字节）：tp-link-cn 等来源只提供 KB 粒度的 advertised_size，
+# ×1024 后与精确文件字节数最多相差 1023 字节，故放宽到 1 KB 避免误判 size_mismatch
+_SIZE_TOLERANCE_BYTES = 1024
+
 
 class UnknownArtifactError(FirmAtlasError):
     """artifact_id 在目录中不存在。"""
@@ -65,6 +69,7 @@ class DownloaderPort(Protocol):
         expected_size: int | None = None,
         on_progress: Callable[[int], None] | None = None,
         referer: str | None = None,
+        size_tolerance: int = 0,
     ) -> DownloadOutcome: ...
 
 
@@ -151,6 +156,7 @@ async def download_artifact(
         expected_size=ctx.artifact.advertised_size,
         on_progress=progress,
         referer=referer,
+        size_tolerance=_SIZE_TOLERANCE_BYTES,
     )
 
     # --- 失效地址刷新：最多一次（AC-29）----------------------------------
@@ -188,6 +194,7 @@ async def download_artifact(
                 expected_size=ctx.artifact.advertised_size,
                 on_progress=progress,
                 referer=referer,
+                size_tolerance=_SIZE_TOLERANCE_BYTES,
             )
         else:
             refresh_note = f"地址刷新失败（{refresh_result.reason_code}）: {refresh_result.detail}"

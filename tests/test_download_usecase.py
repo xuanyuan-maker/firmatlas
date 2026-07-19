@@ -50,12 +50,15 @@ class ScriptedDownloader:
         self._outcomes = list(outcomes)
         self.calls: list[str] = []  # 记录每次调用的 URL
         self.referers: list[str | None] = []  # 记录每次调用收到的 referer
+        self.size_tolerances: list[int] = []  # 记录每次调用收到的 size_tolerance
 
     async def download(
-        self, *, url, dest: Path, expected_size=None, on_progress=None, referer=None
+        self, *, url, dest: Path, expected_size=None, on_progress=None, referer=None,
+        size_tolerance=0,
     ):
         self.calls.append(url)
         self.referers.append(referer)
+        self.size_tolerances.append(size_tolerance)
         outcome = self._outcomes.pop(0)
         if isinstance(outcome, DownloadSucceeded):
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -209,6 +212,8 @@ def test_success_without_official_checksum(uow_factory, seeded_artifact_id, data
     assert report.final_relative_path is not None
     # 下载用例把来源站点根地址作为 Referer 传给下载器（部分厂商校验 Referer）
     assert downloader.referers == ["https://www.tp-link.com.cn/"]
+    # 下载用例对 KB 粒度近似大小放宽 1 KB 容差，避免误判 size_mismatch
+    assert downloader.size_tolerances == [1024]
     # 归档文件真实存在且内容一致
     final = data_dir / report.final_relative_path
     assert final.read_bytes() == CONTENT

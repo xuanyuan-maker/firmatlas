@@ -43,6 +43,7 @@ class Downloader:
         expected_size: int | None = None,
         on_progress: Callable[[int], None] | None = None,
         referer: str | None = None,
+        size_tolerance: int = 0,
     ) -> DownloadOutcome:
         """流式下载到 dest（必须是 data/tmp/downloads/ 下的临时路径）。
 
@@ -50,6 +51,9 @@ class Downloader:
         on_progress 在接收过程中按 ~256 KiB 节流回调（累计字节数）。
         referer 非空时随请求发送 Referer 头（部分厂商下载服务器
         校验 Referer，缺失即 403，如 service.tp-link.com.cn）。
+        size_tolerance 是 expected_size 的允许偏差（字节）：实际大小与
+        预期相差不超过它即视为通过。默认 0（精确比对）；当来源大小为
+        KB 粒度近似值（如 tp-link-cn docSize）时由调用方放宽到 1024。
 
         调用方负责：
         - 确保 dest 的父目录存在
@@ -114,8 +118,8 @@ class Downloader:
         if on_progress is not None and bytes_received > last_notified:
             on_progress(bytes_received)
 
-        # 大小校验（expected_size 不为 None 时才比较）
-        if expected_size is not None and bytes_received != expected_size:
+        # 大小校验（expected_size 不为 None 时才比较；size_tolerance 允许偏差）
+        if expected_size is not None and abs(bytes_received - expected_size) > size_tolerance:
             return DownloadFailed(
                 error_code=DownloadErrorCode.SIZE_MISMATCH,
                 http_status=None,

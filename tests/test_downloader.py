@@ -310,6 +310,48 @@ async def test_download_size_mismatch(tmp_path):
 
 
 @pytest.mark.anyio
+async def test_download_size_within_tolerance_ok(tmp_path):
+    """实际大小与 expected 有小幅偏差，但在 size_tolerance 内 → 视为成功。
+
+    模拟 tp-link-cn 场景：advertised_size 为 KB 粒度近似值，实际文件
+    比它大几百字节；只要偏差不超过 1 KB 就应归为成功而非 size_mismatch。
+    """
+    content = b"x" * 5000
+    port, _ = _serve_file(tmp_path, content)
+
+    async with httpx.AsyncClient() as client:
+        downloader = Downloader(client)
+        outcome = await downloader.download(
+            url=f"http://127.0.0.1:{port}/test_firmware.bin",
+            dest=tmp_path / "downloads" / "result.bin",
+            expected_size=4096,       # 近似值：实际 5000，差 904 字节
+            size_tolerance=1024,      # 容差 1 KB
+        )
+
+    assert isinstance(outcome, DownloadSucceeded)
+    assert outcome.bytes_received == 5000
+
+
+@pytest.mark.anyio
+async def test_download_size_beyond_tolerance_fails(tmp_path):
+    """偏差超过 size_tolerance → 仍判 size_mismatch。"""
+    content = b"x" * 5000
+    port, _ = _serve_file(tmp_path, content)
+
+    async with httpx.AsyncClient() as client:
+        downloader = Downloader(client)
+        outcome = await downloader.download(
+            url=f"http://127.0.0.1:{port}/test_firmware.bin",
+            dest=tmp_path / "downloads" / "result.bin",
+            expected_size=3000,       # 差 2000 字节，超出容差
+            size_tolerance=1024,
+        )
+
+    assert isinstance(outcome, DownloadFailed)
+    assert outcome.error_code is DownloadErrorCode.SIZE_MISMATCH
+
+
+@pytest.mark.anyio
 async def test_download_connection_refused():
     """连接一个不可达端口 → CONNECTION 错误。"""
     async with httpx.AsyncClient() as client:
