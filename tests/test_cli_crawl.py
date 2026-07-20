@@ -59,6 +59,8 @@ def test_init_seeds_sources(tmp_path):
     assert result.exit_code == 0, result.output
     assert "tp-link-cn" in result.output
     assert "TP-Link" in result.output
+    assert "hikvision-global" in result.output
+    assert "Hikvision" in result.output
 
 
 def test_init_is_idempotent_for_seeds(tmp_path):
@@ -70,6 +72,7 @@ def test_init_is_idempotent_for_seeds(tmp_path):
 
     result = runner.invoke(cli, ["--data-dir", data, "sources"])
     assert result.output.count("tp-link-cn") == 1
+    assert result.output.count("hikvision-global") == 1
 
 
 def test_sources_requires_init(tmp_path):

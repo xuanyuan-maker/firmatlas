@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+from firmatlas.adapters.hikvision_global.adapter import HikvisionGlobalAdapter
 from firmatlas.adapters.tplink_cn.adapter import TplinkCnAdapter
 from firmatlas.adapters.tplink_us.adapter import TplinkUsAdapter
 from firmatlas.app.crawl import SourceAdapter
@@ -57,11 +58,27 @@ def seed_sources() -> list[FirmwareSource]:
             created_at=now,
             updated_at=now,
         ),
+        FirmwareSource(
+            id=new_id(),
+            vendor_key="hikvision",
+            vendor_name="Hikvision",
+            source_key="hikvision-global",
+            name="Hikvision Global 固件下载站",
+            region_code="WW",
+            locale="en",
+            base_url="https://www.hikvision.com/en/",
+            adapter_key="hikvision_global",
+            discovery_method=DiscoveryMethod.HTML,
+            enabled=True,
+            created_at=now,
+            updated_at=now,
+        ),
     ]
 
 
 # source_key → 接收 HttpFetcher、返回适配器的构造函数
 _ADAPTER_BUILDERS = {
+    "hikvision-global": HikvisionGlobalAdapter,
     "tp-link-cn": TplinkCnAdapter,
     "tp-link-us": TplinkUsAdapter,
 }
