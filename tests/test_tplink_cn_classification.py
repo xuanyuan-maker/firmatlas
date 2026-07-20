@@ -1,7 +1,7 @@
 """tp-link-cn 品类粗筛 + 型号精判的契约测试。
 
-用例取材于 2026-07-16/17 两轮对 resource.tp-link.com.cn/api/v1/material-center/search
-的真实实测（含研判方独立实测的型号），核心断言：
+用例取材于 2026-07-16/17、2026-07-20 对 TP-Link 资料中心
+`filterConditions` 与 `search` 接口的真实实测，核心断言：
 
 - 摄像机品类（含表面为「太阳能/4G-5G产品」的 2627/2631）下，型号含 IPC → camera；
 - 2631 的非 IPC 记录里混有真 4G 蜂窝路由器（TL-TR907/903/901）→ cellular_cpe，
@@ -10,8 +10,10 @@
 - 路由器品类 2502 → router，蜂窝细分同时看型号与产品名（产品名更可靠）；
   型号里的「5G」不再单独触发蜂窝判定（实测 TL-NR700-4C-5G 是普通企业路由）；
 - 2502 里混入的工业边缘计算网关 TL-IEG → None；
-- 易展（mesh）产品本轮一律跳过（用户决策：宁缺勿错，mesh 专项时统一收）；
-- 非白名单品类（交换机、门禁对讲、充电桩、2501 无线网络等）→ None。
+- 2501 下只查询官方目标子分类：AP/网桥 → wireless_ap，无线路由器按型号细分，
+  全屋 Wi-Fi 套装 → mesh_router；控制器、扩展器、工业级 AP 继续排除；
+- 易展路由器 → mesh_router，但易展 AP 仍是 wireless_ap；
+- 非白名单品类（交换机、门禁对讲、充电桩、2501 父分类等）→ None。
 """
 
 import json
@@ -26,6 +28,7 @@ from firmatlas.adapters.tplink_cn.classification import (
 from firmatlas.domain.model import ProductFamily, ProductType
 
 FIXTURE = Path(__file__).parent / "fixtures" / "tp-link-cn" / "product_class_map.json"
+WIRELESS_FIXTURE = Path(__file__).parent / "fixtures" / "tp-link-cn" / "filter_conditions_2501.json"
 
 
 # --- 摄像机：品类命中 + 型号含 IPC --------------------------------------
@@ -153,17 +156,92 @@ def test_industrial_edge_gateway_is_rejected() -> None:
     assert classify("2502", "TL-IEG5402-5G", "工业级边缘计算网关") is None
 
 
-# --- 易展（mesh）本轮一律跳过（用户决策：宁缺勿错）------------------------
+# --- 无线网络子分类：AP / 网桥 / 无线路由器 / Mesh --------------------------
 
 
-def test_easymesh_in_model_is_skipped() -> None:
-    # 实测 2502 内的易展产品：先跳过，mesh 专项时统一收，避免以
-    # router 错误入库后再修存量。
-    assert classify("2502", "TL-XVR5400G-5G易展版") is None
+@pytest.mark.parametrize("class_id", ["2505", "2763"])
+def test_wireless_ap_and_bridge_map_to_wireless_ap(class_id: str) -> None:
+    model = "TL-XAP3002GI-PoE" if class_id == "2505" else "TL-CPE500G"
+    result = classify(class_id, model)
+    assert result is not None
+    assert result.family is ProductFamily.ROUTER
+    assert result.product_type is ProductType.WIRELESS_AP
 
 
-def test_easymesh_in_product_name_is_skipped() -> None:
-    assert classify("2502", "TL-R5408M", "2.5G易展VPN路由器") is None
+def test_easymesh_ap_stays_wireless_ap() -> None:
+    # 「易展」是 AP 的组网能力，不能把接入点改判成家庭 Mesh 路由器。
+    result = classify("2505", "TL-XAP3000GI-PoE易展版")
+    assert result is not None
+    assert result.product_type is ProductType.WIRELESS_AP
+
+
+@pytest.mark.parametrize(
+    "class_id, model",
+    [
+        ("2505", "TL-N7AP7200DT工业级"),
+        ("2763", "TL-N7CPE7200DT工业级"),
+    ],
+)
+def test_industrial_wireless_devices_are_skipped(class_id: str, model: str) -> None:
+    assert classify(class_id, model) is None
+
+
+def test_wireless_router_defaults_to_router() -> None:
+    result = classify("2507", "TL-XDR3010")
+    assert result is not None
+    assert result.product_type is ProductType.ROUTER
+
+
+@pytest.mark.parametrize("model", ["TL-WA832RE", "TL-WDA6332RE"])
+def test_range_extenders_mixed_into_router_class_are_skipped(model: str) -> None:
+    assert classify("2507", model) is None
+
+
+def test_war_router_is_not_mistaken_for_range_extender() -> None:
+    # 数字边界保证 TL-WAR 系列不会被 TL-WA 扩展器规则误伤。
+    result = classify("2507", "TL-WAR1208L")
+    assert result is not None
+    assert result.product_type is ProductType.ROUTER
+
+
+def test_wireless_router_cellular_signal_maps_to_cellular_cpe() -> None:
+    result = classify("2507", "TL-NR1200W-4G-SD")
+    assert result is not None
+    assert result.product_type is ProductType.CELLULAR_CPE
+
+
+def test_easymesh_wireless_router_maps_to_mesh_router() -> None:
+    result = classify("2507", "TL-XDR6088易展Turbo版")
+    assert result is not None
+    assert result.product_type is ProductType.MESH_ROUTER
+
+
+def test_whole_home_wifi_class_maps_to_mesh_router() -> None:
+    result = classify("2508", "TL-XDR1850易展版")
+    assert result is not None
+    assert result.product_type is ProductType.MESH_ROUTER
+
+
+# --- 2502 内的易展路由器 ----------------------------------------------------
+
+
+def test_easymesh_in_model_maps_to_mesh_router() -> None:
+    result = classify("2502", "TL-XVR5400G-5G易展版")
+    assert result is not None
+    assert result.product_type is ProductType.MESH_ROUTER
+
+
+def test_easymesh_in_product_name_maps_to_mesh_router() -> None:
+    result = classify("2502", "TL-R5408M", "2.5G易展VPN路由器")
+    assert result is not None
+    assert result.product_type is ProductType.MESH_ROUTER
+
+
+def test_known_mesh_model_maps_without_product_name() -> None:
+    # search API 的固件标题只有型号；精确白名单保证适配器也能识别该型号。
+    result = classify("2502", "TL-R5408M")
+    assert result is not None
+    assert result.product_type is ProductType.MESH_ROUTER
 
 
 # --- 非白名单品类：一律跳过 -----------------------------------------------
@@ -172,7 +250,10 @@ def test_easymesh_in_product_name_is_skipped() -> None:
 @pytest.mark.parametrize(
     "class_id, label",
     [
-        ("2501", "无线网络"),  # 本轮暂不处理：混有 AC 控制器/录像机/网卡，留待专项
+        ("2501", "无线网络父分类"),  # 只查询经过验证的子分类，不直接收混杂父分类
+        ("2506", "无线控制器"),
+        ("2509", "无线网卡"),
+        ("2510", "天线及配件"),
         ("2503", "交换机"),
         ("2504", "全光网络"),
         ("2527", "网络安全"),
@@ -188,10 +269,10 @@ def test_non_whitelisted_classes_return_none(class_id: str, label: str) -> None:
     assert classify(class_id, "TL-IPC任意") is None, f"{label}({class_id}) 不应被本轮采集"
 
 
-def test_wireless_network_class_not_yet_handled() -> None:
-    # 2501 含 AC 控制器（TL-AC/NAC，README 排除），本轮整类不收，即使是 AP 型号。
+def test_wireless_parent_and_controller_are_not_accepted() -> None:
+    # 父分类仍不直接接收；控制器子分类也不进入候选集合。
     assert classify("2501", "TL-XAP3002GI-PoE") is None
-    assert classify("2501", "TL-AC1000") is None
+    assert classify("2506", "TL-AC1000") is None
 
 
 def test_switch_and_doorbell_and_charger_rejected() -> None:
@@ -213,19 +294,24 @@ def test_class_id_is_stripped() -> None:
 # --- 粗筛品类 id 集合 ------------------------------------------------------
 
 
-def test_candidate_ids_cover_camera_and_router_classes() -> None:
+def test_candidate_ids_cover_all_target_classes() -> None:
     ids = candidate_product_class_ids()
     for cam in ("2549", "2554", "2559", "2600", "2610", "2627", "2631"):
         assert cam in ids
     assert "2502" in ids
+    for wireless in ("2505", "2763", "2507", "2508"):
+        assert wireless in ids
 
 
-def test_candidate_ids_exclude_switch_doorbell_wireless() -> None:
+def test_candidate_ids_exclude_parent_and_non_target_wireless_classes() -> None:
     ids = candidate_product_class_ids()
     assert "2503" not in ids  # 交换机
     assert "2684" not in ids  # 门禁对讲
     assert "2686" not in ids  # 充电桩
-    assert "2501" not in ids  # 无线网络（含 AC 控制器，留待专项）
+    assert "2501" not in ids  # 混杂的无线网络父分类
+    assert "2506" not in ids  # 无线控制器
+    assert "2509" not in ids  # 无线网卡
+    assert "2510" not in ids  # 天线及配件
 
 
 def test_candidate_ids_exist_in_fixture_class_map() -> None:
@@ -235,5 +321,7 @@ def test_candidate_ids_exist_in_fixture_class_map() -> None:
         for top in data["topProductClassList"]
         for child in top["childrens"]
     }
+    wireless = json.loads(WIRELESS_FIXTURE.read_text(encoding="utf-8"))
+    known_ids.update(str(child["classId"]) for child in wireless["subClasses"])
     for class_id in candidate_product_class_ids():
         assert class_id in known_ids, f"粗筛品类 id {class_id} 不在真实品类树中"

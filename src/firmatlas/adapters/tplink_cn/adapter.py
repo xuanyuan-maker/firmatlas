@@ -79,6 +79,10 @@ class TplinkCnAdapter:
         skipped: list[SkippedCandidate] = []
         # 三级分组：model → hw_version → fw_version → [artifacts]
         product_groups: dict[str, _ProductTree] = {}
+        # 同一厂商记录可能同时属于具体设备分类和「全屋 Wi-Fi 套装」等展示分类。
+        # API 记录 id 是 Artifact 的稳定身份；同一个 id 只处理第一次，既避免
+        # 重复 Artifact，也让候选分类的顺序决定更具体的分类优先级。
+        seen_record_ids: set[str] = set()
 
         class_ids = candidate_product_class_ids()
 
@@ -137,9 +141,12 @@ class TplinkCnAdapter:
                 collection = result.get("collection") or []
 
                 for record in collection:
-                    self._process_record(
-                        record, cid, product_groups, skipped, issues
-                    )
+                    record_id = str(record.get("id", ""))
+                    if record_id and record_id in seen_record_ids:
+                        continue
+                    if record_id:
+                        seen_record_ids.add(record_id)
+                    self._process_record(record, cid, product_groups, skipped, issues)
 
                 page_index += 1
 

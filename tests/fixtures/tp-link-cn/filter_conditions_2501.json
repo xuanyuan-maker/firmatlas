@@ -1,0 +1,73 @@
+{
+  "_note": "裁剪自 https://resource.tp-link.com.cn/api/v1/material-center/filterConditions（2026-07-20 通过 Chrome DevTools MCP 抓取）。仅保留无线网络(2501)子分类，未包含 Cookie、请求头或用户数据。",
+  "classId": 2501,
+  "parentClassId": 0,
+  "level": 1,
+  "className": "无线网络",
+  "classTip": "wirelessfidelity",
+  "subClasses": [
+    {
+      "classId": 2773,
+      "parentClassId": 2501,
+      "level": 2,
+      "className": "新品",
+      "classTip": "wirelessfidelitynew"
+    },
+    {
+      "classId": 2811,
+      "parentClassId": 2501,
+      "level": 2,
+      "className": "超级系列",
+      "classTip": "superseries"
+    },
+    {
+      "classId": 2505,
+      "parentClassId": 2501,
+      "level": 2,
+      "className": "无线AP",
+      "classTip": "accesspoint"
+    },
+    {
+      "classId": 2506,
+      "parentClassId": 2501,
+      "level": 2,
+      "className": "无线控制器（AC）",
+      "classTip": "accesscontroller"
+    },
+    {
+      "classId": 2763,
+      "parentClassId": 2501,
+      "level": 2,
+      "className": "无线网桥",
+      "classTip": "wirelessbridgev116"
+    },
+    {
+      "classId": 2507,
+      "parentClassId": 2501,
+      "level": 2,
+      "className": "无线路由器",
+      "classTip": "wirelessrouters"
+    },
+    {
+      "classId": 2508,
+      "parentClassId": 2501,
+      "level": 2,
+      "className": "全屋Wi-Fi套装",
+      "classTip": "meshwifisystem"
+    },
+    {
+      "classId": 2509,
+      "parentClassId": 2501,
+      "level": 2,
+      "className": "无线网卡",
+      "classTip": "wnic"
+    },
+    {
+      "classId": 2510,
+      "parentClassId": 2501,
+      "level": 2,
+      "className": "天线及配件",
+      "classTip": "antennaaccessories"
+    }
+  ]
+}

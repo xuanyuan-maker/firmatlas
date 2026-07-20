@@ -1,0 +1,94 @@
+{
+  "_note": "2026-07-20 通过 Chrome DevTools MCP 调用资料中心 search 接口所得的脱敏裁剪样本。只保留分类判断所需的厂商记录 id、title、url；observedTotals 是当日 UPGRADE_SOFT+zip 查询结果。",
+  "parentClassId": "2501",
+  "observedTotals": {
+    "2501": 355,
+    "2505": 127,
+    "2506": 33,
+    "2763": 22,
+    "2507": 173,
+    "2508": 4,
+    "2509": 0,
+    "2510": 0
+  },
+  "samplesByClass": {
+    "2505": [
+      {
+        "id": 1777009207286066,
+        "title": "TL-XAP3008GI-PoE V3.0升级软件20251204_1.0.7",
+        "url": "https://media.tp-link.com.cn/software/TL-XAP3008GI-PoE V3.0升级软件20251204_1.0.7.zip"
+      },
+      {
+        "id": 1752493550306344,
+        "title": "TL-7AP3602HI-PoE 薄款（方）易展版 V1.0升级软件20250228_1.0.11",
+        "url": "https://media.tp-link.com.cn/software/TL-7AP3602HI-PoE 薄款（方）易展版 V1.0升级软件20250228_1.0.11.zip"
+      },
+      {
+        "id": 1782350179694336,
+        "title": "TL-N7AP13000-TP3-MS工业级 V1.0升级软件20260527_1.0.3",
+        "url": "https://media.tp-link.com.cn/software/TL-N7AP13000-TP3-MS工业级 V1.0升级软件20260527_1.0.3.zip"
+      }
+    ],
+    "2763": [
+      {
+        "id": 1634201875328726,
+        "title": "TL-CPE200 V2.0升级软件20181114_2.0.2",
+        "url": "https://service.tp-link.com.cn/download/201812/TL-CPE200 V2.0升级软件20181114_2.0.2.zip"
+      },
+      {
+        "id": 1782350170536464,
+        "title": "TL-N7CPE7200DT工业级 V1.0升级软件20260426_1.0.2",
+        "url": "https://media.tp-link.com.cn/software/TL-N7CPE7200DT工业级 V1.0升级软件20260426_1.0.2.zip"
+      }
+    ],
+    "2507": [
+      {
+        "id": 1783662000886021,
+        "title": "TL-XDR3010 V9.0升级软件20260626_1.0.23",
+        "url": "https://media.tp-link.com.cn/software/TL-XDR3010 V9.0升级软件20260626_1.0.23.zip"
+      },
+      {
+        "id": 1777182612578347,
+        "title": "TL-WDR7650千兆易展版 V1.0升级软件20260320_3.0.14",
+        "url": "https://media.tp-link.com.cn/software/TL-WDR7650千兆易展版 V1.0升级软件20260320_3.0.14.zip"
+      },
+      {
+        "id": 1770342607719064,
+        "title": "TL-NR1200W-4G-SD V2.0升级软件20250826_1.0.1",
+        "url": "https://media.tp-link.com.cn/software/TL-NR1200W-4G-SD V2.0升级软件20250826_1.0.1.zip"
+      },
+      {
+        "id": 1634201887758050,
+        "title": "TL-WA832RE V4.0升级软件20181210_1.0.14",
+        "url": "https://service.tp-link.com.cn/download/20192/TL-WA832RE V4.0升级软件20181210_1.0.14.zip"
+      },
+      {
+        "id": 1696226495185684,
+        "title": "TL-WDA6332RE V3.0升级软件20230413_1.0.22",
+        "url": "https://service.tp-link.com.cn/download/202310/TL-WDA6332RE V3.0升级软件20230413_1.0.22.zip"
+      }
+    ],
+    "2508": [
+      {
+        "id": 1752493550306344,
+        "title": "TL-7AP3602HI-PoE 薄款（方）易展版 V1.0升级软件20250228_1.0.11",
+        "url": "https://media.tp-link.com.cn/software/TL-7AP3602HI-PoE 薄款（方）易展版 V1.0升级软件20250228_1.0.11.zip"
+      },
+      {
+        "id": 1634202031781624,
+        "title": "TL-XDR1850易展版 V1.0升级软件20210311_1.0.10",
+        "url": "https://service.tp-link.com.cn/download/20218/TL-XDR1850易展版 V1.0升级软件20210311_1.0.10.zip"
+      }
+    ]
+  },
+  "observedOverlap": [
+    {
+      "id": 1752493550306344,
+      "classIds": ["2505", "2508"]
+    },
+    {
+      "id": 1634202031781624,
+      "classIds": ["2507", "2508"]
+    }
+  ]
+}

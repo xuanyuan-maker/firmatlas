@@ -184,6 +184,42 @@ async def test_source_keys_are_stable() -> None:
     assert keys1 == keys2
 
 
+@pytest.mark.anyio
+async def test_duplicate_record_across_wireless_classes_is_processed_once() -> None:
+    """同一记录属于 AP 与全屋 Wi-Fi 分类时，以先查询的 AP 分类为准且不重复。"""
+    wireless_fixture = _load_fixture("search_2501_wireless.json")
+    duplicated_record = wireless_fixture["samplesByClass"]["2505"][1]
+    assert duplicated_record["id"] in {
+        item["id"] for item in wireless_fixture["samplesByClass"]["2508"]
+    }
+    duplicate_response = _make_search_response([duplicated_record])
+
+    from firmatlas.adapters.tplink_cn.classification import candidate_product_class_ids
+
+    responses = {
+        f"{cid}_p1": (
+            duplicate_response
+            if cid in {"2505", "2508"}
+            else {"result": {"total": 0, "collection": []}}
+        )
+        for cid in candidate_product_class_ids()
+    }
+    adapter = TplinkCnAdapter(_MockHttpFetcher(responses))
+
+    events = [event async for event in adapter.discover()]
+    products = [event.product for event in events if isinstance(event, DiscoveredProduct)]
+
+    assert len(products) == 1
+    assert products[0].product_type.value == "wireless_ap"
+    artifacts = [
+        artifact
+        for hardware in products[0].hardware_revisions
+        for release in hardware.releases
+        for artifact in release.artifacts
+    ]
+    assert [artifact.source_key for artifact in artifacts] == ["1752493550306344"]
+
+
 # -- 测试：SkippedCandidate 类型正确 -----------------------------------------
 
 
@@ -197,13 +233,13 @@ def _make_search_response(
 @pytest.mark.anyio
 async def test_non_target_products_are_skipped() -> None:
     """classify() 返回 None 的记录被产出为 SkippedCandidate（AC-08）。"""
-    # 使用含"易展"的型号：classify() 发现易展即返回 None（本轮宁缺勿错策略）
+    # 2502 中混入的工业边缘计算网关不属于 README 五类。
     mock_data = _make_search_response(
         [
             {
                 "id": 99999901,
                 "category": "SOFTWARE",
-                "title": "TL-XVR5400G-5G易展版 V1.0升级软件20260101_1.0.0",
+                "title": "TL-IEG5402-5G V1.0升级软件20260101_1.0.0",
                 "url": "https://media.tp-link.com.cn/software/test.zip",
                 "format": "zip",
                 "softwareType": "UPGRADE_SOFT",
@@ -229,11 +265,11 @@ async def test_non_target_products_are_skipped() -> None:
     skipped = [e for e in events if isinstance(e, SkippedCandidate)]
     products = [e for e in events if isinstance(e, DiscoveredProduct)]
 
-    # 易展记录应被跳过
+    # 工业网关记录应被跳过
     assert len(skipped) >= 1
     assert any(s.reason_code == SkipReason.UNMAPPED_TYPE for s in skipped)
 
-    # 没有产品被产出（唯一记录是易展→跳过）
+    # 没有产品被产出（唯一记录是工业网关→跳过）
     assert len(products) == 0
 
 
