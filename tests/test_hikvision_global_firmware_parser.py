@@ -95,3 +95,26 @@ def test_missing_download_url_is_preserved_for_adapter_validation() -> None:
 
     asset = parse_firmware_products(html)[0].groups[0].firmware_assets[0]
     assert asset.download_url is None
+
+
+def test_parse_applied_models_with_implicitly_closed_list_items() -> None:
+    """真实国际站省略 ``</li>``，解析器仍应在下一个 li 或 ul 处结束型号。"""
+    html = """
+    <div class="nav-item" data-main-tag="IP-Products" data-sub-tag="Network-Cameras">
+      <div class="main-title"><a class="link" href="/camera/">Camera</a></div>
+      <div class="main-item">
+        <div class="firmware-section">
+          <a data-title="Firmware_V1.0.0_250101"
+             data-href="https://assets.hikvision.com/files/firmware.zip">Firmware</a>
+        </div>
+        <ul class="sub-list">
+          <li class="sub-item">CAMERA-1
+          <li class="sub-item">CAMERA-2
+        </ul>
+      </div>
+    </div>
+    """
+
+    group = parse_firmware_products(html)[0].groups[0]
+
+    assert group.applied_models == ("CAMERA-1", "CAMERA-2")

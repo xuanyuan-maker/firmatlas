@@ -147,6 +147,7 @@ class _FirmwareListingParser(HTMLParser):
         elif tag == "a" and self._product is not None:
             self._start_link(attr)
         elif tag == "li" and "sub-item" in classes and self._group is not None:
+            self._finish_model()
             self._model_parts = []
 
         self._stack.append(_ElementState(tag=tag, classes=classes))
@@ -156,6 +157,8 @@ class _FirmwareListingParser(HTMLParser):
         self.handle_endtag(tag)
 
     def handle_endtag(self, tag: str) -> None:
+        if tag == "ul" and self._model_parts is not None:
+            self._finish_model()
         state = self._pop_state(tag)
         if state is None:
             return
@@ -226,10 +229,10 @@ class _FirmwareListingParser(HTMLParser):
         self._model_parts = None
 
     def _finish_group(self) -> None:
+        self._finish_model()
         if self._group is not None and self._product is not None:
             self._product.groups.append(self._group.freeze())
         self._group = None
-        self._model_parts = None
 
     def _finish_product(self) -> None:
         self._finish_group()
