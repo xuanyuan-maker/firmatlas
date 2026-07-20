@@ -15,6 +15,7 @@ import sqlalchemy as sa
 
 from firmatlas import __version__
 from firmatlas.app import registry
+from firmatlas.app.config import AppConfig, load_config
 from firmatlas.app.crawl import CrawlReport, crawl_source
 from firmatlas.app.download import DownloadReport, download_artifact
 from firmatlas.app.queries import OUTPUT_SCHEMA_VERSION, CatalogFilter
@@ -39,27 +40,46 @@ from firmatlas.infra.repository import SqliteUnitOfWorkFactory
 @click.group(name="firmatlas")
 @click.version_option(version=__version__, prog_name="firmatlas")
 @click.option(
-    "--data-dir",
-    type=click.Path(file_okay=False),
-    default="data",
-    show_default=True,
-    help="数据根目录（数据库、固件与临时文件所在位置）。",
+    "--config",
+    "config_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="TOML 配置文件路径。",
 )
-@click.option("--verbose", is_flag=True, default=False, help="输出详细日志到标准错误。")
-@click.option("--no-color", is_flag=True, default=False, help="禁用彩色输出。")
+@click.option(
+    "--data-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="数据根目录；默认 data，可覆盖配置文件。",
+)
+@click.option("--verbose", is_flag=True, default=None, help="输出详细日志到标准错误。")
+@click.option("--no-color", is_flag=True, default=None, help="禁用彩色输出。")
 @click.pass_context
-def cli(ctx: click.Context, data_dir: str, verbose: bool, no_color: bool) -> None:
+def cli(
+    ctx: click.Context,
+    config_path: Path | None,
+    data_dir: Path | None,
+    verbose: bool | None,
+    no_color: bool | None,
+) -> None:
     """FirmAtlas：IoT 固件目录采集与按需下载。"""
     ctx.ensure_object(dict)
-    lock = DataDirectoryLock(Path(data_dir))
     try:
+        config = load_config(
+            config_path=config_path,
+            data_dir=data_dir,
+            verbose=verbose,
+            no_color=no_color,
+        )
+        lock = DataDirectoryLock(config.data_dir)
         lock.acquire()
     except FirmAtlasError as exc:
         raise click.ClickException(str(exc)) from exc
     ctx.call_on_close(lock.release)
-    ctx.obj["data_dir"] = data_dir
-    ctx.obj["verbose"] = verbose
-    ctx.obj["no_color"] = no_color
+    ctx.obj["config"] = config
+    ctx.obj["data_dir"] = config.data_dir
+    ctx.obj["verbose"] = config.verbose
+    ctx.obj["no_color"] = config.no_color
 
 
 def _open_database_with_recovery(data_dir: Path) -> sa.Engine:
@@ -79,6 +99,24 @@ def _open_database_with_recovery(data_dir: Path) -> sa.Engine:
             err=True,
         )
     return engine
+
+
+@cli.command(name="config")
+@click.pass_context
+def config_command(ctx: click.Context) -> None:
+    """显示合并默认值、TOML 和 CLI 参数后的有效配置。"""
+    config: AppConfig = ctx.obj["config"]
+    config_source = config.config_path if config.config_path else "未指定（使用内置默认值）"
+    click.echo(f"配置文件：{config_source}")
+    click.echo(f"数据目录：{config.data_dir}")
+    click.echo(f"详细日志：{'开启' if config.verbose else '关闭'}")
+    click.echo(f"颜色输出：{'关闭' if config.no_color else '开启'}")
+    click.echo(f"HTTP 请求超时：{config.http.request_timeout:g}s")
+    click.echo(f"HTTP 连接超时：{config.http.connect_timeout:g}s")
+    click.echo(f"HTTP 最大重试次数：{config.http.max_retries}")
+    click.echo(f"HTTP 退避基数：{config.http.retry_backoff_base:g}s")
+    click.echo(f"下载读取超时：{config.download.read_timeout:g}s")
+    click.echo(f"下载连接超时：{config.download.connect_timeout:g}s")
 
 
 @cli.command(name="init")
@@ -111,6 +149,7 @@ def init_command(ctx: click.Context) -> None:
 def crawl_command(ctx: click.Context, source_key: str) -> None:
     """采集指定来源的固件元数据（如 tp-link-cn）。"""
     data_dir = Path(ctx.obj["data_dir"])
+    config: AppConfig = ctx.obj["config"]
     try:
         registry.check_supported(source_key)
         engine = _open_database_with_recovery(data_dir)
@@ -118,8 +157,16 @@ def crawl_command(ctx: click.Context, source_key: str) -> None:
         raise click.ClickException(str(exc)) from exc
 
     async def _run() -> CrawlReport:
-        async with make_http_client() as client:
-            adapter = registry.build_adapter(source_key, HttpFetcher(client))
+        async with make_http_client(
+            request_timeout=config.http.request_timeout,
+            connect_timeout=config.http.connect_timeout,
+        ) as client:
+            http = HttpFetcher(
+                client,
+                max_retries=config.http.max_retries,
+                retry_backoff_base=config.http.retry_backoff_base,
+            )
+            adapter = registry.build_adapter(source_key, http)
             return await crawl_source(
                 adapter=adapter, uow_factory=SqliteUnitOfWorkFactory(engine)
             )
@@ -405,6 +452,7 @@ def show_command(ctx: click.Context, release_id: str, output_format: str) -> Non
 def download_command(ctx: click.Context, artifact_ids: tuple[str, ...]) -> None:
     """下载固件并校验归档（接受 list 的发布 ID 或 show 的 Artifact ID，可用前缀）。"""
     data_dir = Path(ctx.obj["data_dir"])
+    config: AppConfig = ctx.obj["config"]
     try:
         engine = _open_database_with_recovery(data_dir)
     except FirmAtlasError as exc:
@@ -416,8 +464,15 @@ def download_command(ctx: click.Context, artifact_ids: tuple[str, ...]) -> None:
 
     async def _run_all() -> None:
         nonlocal failures
-        async with make_http_client() as client:
-            downloader = Downloader(client)
+        async with make_http_client(
+            request_timeout=config.http.request_timeout,
+            connect_timeout=config.http.connect_timeout,
+        ) as client:
+            downloader = Downloader(
+                client,
+                read_timeout=config.download.read_timeout,
+                connect_timeout=config.download.connect_timeout,
+            )
             for raw_id in artifact_ids:
                 try:
                     artifact_id, source_key = _resolve_artifact(engine, uow_factory, raw_id)
@@ -425,7 +480,7 @@ def download_command(ctx: click.Context, artifact_ids: tuple[str, ...]) -> None:
                     failures += 1
                     click.echo(f"{raw_id}: {exc}", err=True)
                     continue
-                adapter = _build_refreshing_adapter(source_key, client)
+                adapter = _build_refreshing_adapter(source_key, client, config)
                 try:
                     report = await download_artifact(
                         artifact_id=artifact_id,
@@ -502,10 +557,15 @@ def _source_key_of(uow_factory, artifact_id: str) -> str:
     return ctx.source.source_key
 
 
-def _build_refreshing_adapter(source_key: str, client):
+def _build_refreshing_adapter(source_key: str, client, config: AppConfig):
     """来源有适配器且实现了地址刷新时返回适配器，否则返回 None（下载仍可进行）。"""
     try:
-        adapter = registry.build_adapter(source_key, HttpFetcher(client))
+        http = HttpFetcher(
+            client,
+            max_retries=config.http.max_retries,
+            retry_backoff_base=config.http.retry_backoff_base,
+        )
+        adapter = registry.build_adapter(source_key, http)
     except FirmAtlasError:
         return None
     return adapter if hasattr(adapter, "refresh_artifact_url") else None

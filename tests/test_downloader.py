@@ -262,6 +262,26 @@ async def test_download_without_referer_sends_no_header(tmp_path):
 
 
 @pytest.mark.anyio
+async def test_downloader_uses_effective_timeout_config(tmp_path):
+    seen_timeout = {}
+
+    async def handler(request):
+        seen_timeout.update(request.extensions["timeout"])
+        return httpx.Response(200, content=b"configured", request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        downloader = Downloader(client, read_timeout=17, connect_timeout=4)
+        outcome = await downloader.download(
+            url="https://example.com/firmware.bin",
+            dest=tmp_path / "downloads" / "configured.bin",
+        )
+
+    assert isinstance(outcome, DownloadSucceeded)
+    assert seen_timeout["read"] == 17
+    assert seen_timeout["connect"] == 4
+
+
+@pytest.mark.anyio
 async def test_download_http_404(tmp_path):
     port, _ = _serve_file(tmp_path, b"error", status=404)
 

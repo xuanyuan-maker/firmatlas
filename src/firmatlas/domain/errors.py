@@ -30,3 +30,7 @@ class InvalidTransitionError(RepositoryError):
 
 class ProcessLockError(FirmAtlasError):
     """同一数据目录已有另一个 FirmAtlas 进程正在运行。"""
+
+
+class ConfigError(FirmAtlasError):
+    """配置文件不存在、格式错误或配置值无效。"""

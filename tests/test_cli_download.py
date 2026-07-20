@@ -43,9 +43,13 @@ class ScriptedDownloader:
     """替换 cli.main.Downloader 的假下载器类（构造参数与真类一致）。"""
 
     outcomes: list = []  # 类属性：测试逐例预设
+    options: dict = {}
 
-    def __init__(self, client):
-        pass
+    def __init__(self, client, *, read_timeout=60, connect_timeout=10):
+        ScriptedDownloader.options = {
+            "read_timeout": read_timeout,
+            "connect_timeout": connect_timeout,
+        }
 
     async def download(
         self, *, url, dest: Path, expected_size=None, on_progress=None, referer=None,
@@ -115,6 +119,26 @@ def test_download_success_and_history(seeded_cli):
     assert result.exit_code == 0, result.output
     assert "completed" in result.output
     assert artifact_id[:8] in result.output
+
+
+def test_download_receives_effective_timeout_config(seeded_cli, tmp_path):
+    runner, data, artifact_id = seeded_cli
+    config_path = tmp_path / "firmatlas.toml"
+    config_path.write_text(
+        f"""
+data_dir = "{data}"
+[download]
+read_timeout = 75
+connect_timeout = 6
+""".strip(),
+        encoding="utf-8",
+    )
+    ScriptedDownloader.outcomes = [succeeded()]
+
+    result = runner.invoke(cli, ["--config", str(config_path), "download", artifact_id])
+
+    assert result.exit_code == 0, result.output
+    assert ScriptedDownloader.options == {"read_timeout": 75.0, "connect_timeout": 6.0}
 
 
 def test_download_accepts_id_prefix(seeded_cli):

@@ -63,7 +63,8 @@ class FetchError(FirmAtlasError):
 # HttpFetcher 实现
 # ---------------------------------------------------------------------------
 
-_DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+_DEFAULT_REQUEST_TIMEOUT = 30.0
+_DEFAULT_CONNECT_TIMEOUT = 10.0
 _MAX_RETRIES = 3
 _RETRY_BACKOFF_BASE = 1.0  # 秒：1, 2, 4
 
@@ -75,8 +76,16 @@ class HttpFetcher:
     同一 client 在整个采集任务中复用（Keep-Alive）。
     """
 
-    def __init__(self, client: httpx.AsyncClient) -> None:
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        max_retries: int = _MAX_RETRIES,
+        retry_backoff_base: float = _RETRY_BACKOFF_BASE,
+    ) -> None:
         self._client = client
+        self._max_retries = max_retries
+        self._retry_backoff_base = retry_backoff_base
 
     # -- POST JSON（tp-link-cn search API 的核心调用） ------------------
 
@@ -137,7 +146,7 @@ class HttpFetcher:
     ) -> Any:
         last_error: FetchError | None = None
 
-        for attempt in range(_MAX_RETRIES + 1):
+        for attempt in range(self._max_retries + 1):
             try:
                 response = await factory()
             except httpx.TimeoutException:
@@ -173,8 +182,8 @@ class HttpFetcher:
                     f"server error: {response.text[:200]}",
                 )
 
-            if attempt < _MAX_RETRIES:
-                delay = _RETRY_BACKOFF_BASE * (2 ** attempt)
+            if attempt < self._max_retries:
+                delay = self._retry_backoff_base * (2 ** attempt)
                 await asyncio.sleep(delay)
 
         # 重试耗尽
@@ -182,13 +191,17 @@ class HttpFetcher:
         raise last_error
 
 
-def make_http_client() -> httpx.AsyncClient:
+def make_http_client(
+    *,
+    request_timeout: float = _DEFAULT_REQUEST_TIMEOUT,
+    connect_timeout: float = _DEFAULT_CONNECT_TIMEOUT,
+) -> httpx.AsyncClient:
     """创建带有项目默认超时策略的 AsyncClient。
 
     调用方负责生命周期管理（async with client: ...）。
     """
     return httpx.AsyncClient(
-        timeout=_DEFAULT_TIMEOUT,
+        timeout=httpx.Timeout(request_timeout, connect=connect_timeout),
         headers={"User-Agent": "FirmAtlas/0.1"},
         follow_redirects=True,
     )

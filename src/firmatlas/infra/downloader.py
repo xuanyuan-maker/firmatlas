@@ -21,7 +21,8 @@ from firmatlas.domain.model import (
 )
 
 # 固件下载空闲读取超时 60s，总超时不设（大文件可一直下）
-_DOWNLOAD_TIMEOUT = httpx.Timeout(60.0, read=60.0, connect=10.0)
+_DEFAULT_READ_TIMEOUT = 60.0
+_DEFAULT_CONNECT_TIMEOUT = 10.0
 # on_progress 回调的最小间隔（字节），避免过于频繁的磁盘写入
 _PROGRESS_THRESHOLD_BYTES = 256 * 1024  # 256 KiB
 
@@ -32,8 +33,19 @@ class Downloader:
     用法：实例化时传入 AsyncClient（复用长连接），调用方负责 client 生命周期。
     """
 
-    def __init__(self, client: httpx.AsyncClient) -> None:
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        read_timeout: float = _DEFAULT_READ_TIMEOUT,
+        connect_timeout: float = _DEFAULT_CONNECT_TIMEOUT,
+    ) -> None:
         self._client = client
+        self._timeout = httpx.Timeout(
+            read_timeout,
+            read=read_timeout,
+            connect=connect_timeout,
+        )
 
     async def download(
         self,
@@ -72,7 +84,7 @@ class Downloader:
 
         try:
             async with self._client.stream(
-                "GET", url, headers=headers, timeout=_DOWNLOAD_TIMEOUT, follow_redirects=True,
+                "GET", url, headers=headers, timeout=self._timeout, follow_redirects=True,
             ) as response:
                 # 响应级错误：直接返回 DownloadFailed
                 if response.status_code >= 400:
