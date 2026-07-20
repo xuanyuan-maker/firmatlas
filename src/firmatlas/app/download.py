@@ -40,7 +40,7 @@ from firmatlas.domain.model import (
 )
 from firmatlas.domain.timeutil import utc_now
 
-# 触发地址刷新的错误码（README 0x0D：失效地址）
+# 触发地址刷新的错误码（需求分析 0x0D：失效地址）
 _REFRESHABLE_CODES = frozenset(
     {DownloadErrorCode.HTTP_403, DownloadErrorCode.HTTP_404, DownloadErrorCode.HTTP_410}
 )

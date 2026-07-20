@@ -1,4 +1,4 @@
-"""SQLite 数据库的初始化与打开（README 0x0C 版本策略、0x0D 目录布局）。
+"""SQLite 数据库的初始化与打开（需求分析 0x0C/0x0D）。
 
 - `initialize`：`firmatlas init` 的核心，幂等创建目录骨架、建表、盖版本戳。
 - `open_database`：其余命令打开数据库的唯一入口，版本不匹配即拒绝，
@@ -15,7 +15,7 @@ from firmatlas.infra.schema import SCHEMA_VERSION, metadata
 
 DB_FILENAME = "firmatlas.db"
 
-# data/ 下需要预创建的子目录（README 0x0D）
+# data/ 下需要预创建的子目录（需求分析 0x0D）
 DATA_SUBDIRS = ("firmware", "tmp/downloads", "cache/http", "logs")
 
 

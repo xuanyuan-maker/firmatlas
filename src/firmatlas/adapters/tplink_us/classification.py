@@ -8,15 +8,15 @@ US 下载站的索引页内嵌 productTree JSON，每个型号自带 `menu_name`
 
 ## 范围（2026-07-19 用户决策）
 
-只采集 README 五类：router / mesh_router / wireless_ap / cellular_cpe / camera。
+只采集需求分析定义的五类：router / mesh_router / wireless_ap / cellular_cpe / camera。
 关键边界（实测 menu_name 语义）：
 
 - `CPE`（Pharos 户外无线网桥/基站 CPE210/WBS510 等）→ wireless_ap
-  （是无线接入/桥接设备，**不是**蜂窝 CPE，勿与 README 的 cellular_cpe 混淆）
+  （是无线接入/桥接设备，**不是**蜂窝 CPE，勿与需求分析的 cellular_cpe 混淆）
 - `5G/4G Routers`（家用蜂窝路由，如 TL-MR3220）→ cellular_cpe；
   `4G Wi-Fi Gateways`（Omada 商用网关）**排除**（商用网关，且多重定向到独立站）
 - 网关/调制解调类（Wired/DSL/Cable Gateway、Cable Modems & Routers 等）**全部排除**
-  （README 五类无对应类型）
+  （需求分析定义的五类无对应类型）
 - `Video Recorders`（NVR）、`Security Camera Systems`（摄像头+NVR 套装）**排除**，
   只收纯摄像头（`Smart Cameras` / `Cameras`）
 
@@ -62,7 +62,7 @@ _MENU_NAME_MAP: dict[str, tuple[ProductFamily, ProductType]] = {
 class Classification:
     """一次成功的分类判定结果。
 
-    source_category 保留厂商原始 menu_name（README 要求保留厂商原始分类）。
+    source_category 保留厂商原始 menu_name（需求分析要求保留厂商原始分类）。
     """
 
     source_category: str

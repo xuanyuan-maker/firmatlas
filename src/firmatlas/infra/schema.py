@@ -1,7 +1,7 @@
-"""SQLite 表结构定义（README 0x0B）。
+"""SQLite 表结构定义（需求分析 0x0B）。
 
 本模块是 7 张表的唯一定义处，只允许基础设施层（infra）import。
-通用规则（README 0x0B「通用数据库规则」）：
+通用规则（需求分析 0x0B「通用数据库规则」）：
 - 主键为应用生成的不透明 TEXT ID；
 - 时间为 UTC RFC 3339 文本，发布日期为 YYYY-MM-DD 文本；
 - 布尔用 INTEGER 且限制为 0/1；
@@ -21,7 +21,7 @@ from sqlalchemy import (
     text,
 )
 
-# 当前表结构对应的 PRAGMA user_version 值（README 0x0C）
+# 当前表结构对应的 PRAGMA user_version 值（需求分析 0x0C）
 SCHEMA_VERSION = 1
 
 metadata = MetaData()
@@ -272,7 +272,7 @@ download_records = Table(
     ),
 )
 
-# 推荐索引（README 0x0B「推荐索引」）
+# 推荐索引（需求分析 0x0B「推荐索引」）
 Index("ix_products_source_family_type", products.c.source_id, products.c.product_family,
       products.c.product_type)
 Index("ix_products_model_normalized", products.c.model_normalized)

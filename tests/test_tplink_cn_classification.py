@@ -152,7 +152,7 @@ def test_name_2dot5g_port_speed_is_not_cellular() -> None:
 
 
 def test_industrial_edge_gateway_is_rejected() -> None:
-    # 实测 2502 混有 TL-IEG5402-5G（工业级边缘计算网关），README 范围外。
+    # 实测 2502 混有 TL-IEG5402-5G（工业级边缘计算网关），需求分析范围外。
     assert classify("2502", "TL-IEG5402-5G", "工业级边缘计算网关") is None
 
 

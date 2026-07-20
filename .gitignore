@@ -3,9 +3,9 @@ CLAUDE.md
 AGENTS.md
 .claude/
 
-# Local planning docs
+# Local planning and design docs
 PLAN.md
-docs/interface-design.md
+docs/
 
 # Python
 .venv/

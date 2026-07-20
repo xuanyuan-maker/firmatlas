@@ -1,4 +1,4 @@
-"""UTC RFC 3339 时间文本与 datetime 的互转（README 0x0B 通用规则）。
+"""UTC RFC 3339 时间文本与 datetime 的互转（需求分析 0x0B）。
 
 约定：
 - 数据库中的时间一律为 'YYYY-MM-DDTHH:MM:SSZ'，精确到秒；

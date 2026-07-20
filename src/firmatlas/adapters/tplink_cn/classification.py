@@ -3,7 +3,7 @@
 ## 这个模块解决什么问题
 
 TP-Link 资料中心（resource.tp-link.com.cn）把所有品类的升级软件混在一个列表里。
-README 0x02 限定 MVP 只采集路由器类（router/mesh_router/wireless_ap/
+需求分析 0x02 限定 MVP 只采集路由器类（router/mesh_router/wireless_ap/
 cellular_cpe）和摄像头（camera）。因此采集前必须过滤。
 
 **实测（2026-07-16/17、2026-07-20）发现父品类白名单不成立**，因此改用两级过滤：
@@ -22,7 +22,7 @@ cellular_cpe）和摄像头（camera）。因此采集前必须过滤。
   - 2627/2631 混有配件（支架 TL-ZJ、电源 TL-SP）→ 靠「不含 IPC」跳过；
   - 2631 的非 IPC 里又混有**真 4G 蜂窝路由器**（TL-TR907/903/901，实测
     2026-07-17）→ 不能一概当配件，须按蜂窝信号收为 cellular_cpe；
-  - 2502 混有工业边缘计算网关（TL-IEG 系列，README 范围外）→ 按前缀排除。
+  - 2502 混有工业边缘计算网关（TL-IEG 系列，需求分析范围外）→ 按前缀排除。
 
 2026-07-20 通过资料中心 `filterConditions` 接口确认，「无线网络(2501)」还提供
 可直接查询的子分类：无线 AP(2505)、无线控制器(2506)、无线网桥(2763)、
@@ -99,7 +99,7 @@ _CAMERA_MODEL_HINT = re.compile(r"IPC", re.IGNORECASE)
 # 2631「4G/5G产品」内非 IPC 的真蜂窝路由器系列（实测 TL-TR907/903/901）。
 _TR_CELLULAR_ROUTER = re.compile(r"^TL-TR\d", re.IGNORECASE)
 
-# 工业边缘计算网关（实测 2502 内混有 TL-IEG5402-5G），README 范围外。
+# 工业边缘计算网关（实测 2502 内混有 TL-IEG5402-5G），需求分析范围外。
 _INDUSTRIAL_GATEWAY_PREFIX = "TL-IEG"
 
 # 强蜂窝信号：4G / LTE（词边界；同时排除「2.4G」这类频段写法——点号前缀不算），
@@ -121,7 +121,7 @@ _EASYMESH_HINT = "易展"
 # 把真正的 TL-WAR 无线路由器误排除。
 _RANGE_EXTENDER_MODEL = re.compile(r"^TL-W(?:A|DA)\d", re.IGNORECASE)
 
-# README 的 wireless_ap 范围是家用或小型网络接入设备，明确标为工业级的
+# 需求分析的 wireless_ap 范围是家用或小型网络接入设备，明确标为工业级的
 # AP/CPE 不进入 MVP。
 _INDUSTRIAL_MARKER = "工业级"
 
@@ -134,7 +134,7 @@ _KNOWN_MESH_MODELS = frozenset({"TL-R5408M"})
 class Classification:
     """一次成功的品类判定结果。
 
-    product_class_name 保留厂商原始品类名，对应 README 的 source_category
+    product_class_name 保留厂商原始品类名，对应需求分析的 source_category
     （厂商原始分类必须保留）。
     """
 
@@ -190,7 +190,7 @@ def classify(
         return None
 
     if key in _ROUTER_CANDIDATE_CLASSES:
-        # 排除混入 2502 的工业边缘计算网关（README 范围外）。
+        # 排除混入 2502 的工业边缘计算网关（需求分析范围外）。
         if model_key.startswith(_INDUSTRIAL_GATEWAY_PREFIX):
             return None
         if is_easy_mesh or model_key in _KNOWN_MESH_MODELS:

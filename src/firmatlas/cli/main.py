@@ -1,6 +1,6 @@
 """FirmAtlas CLI 入口。
 
-MVP 命令结构见 README 0x0F；子命令随各开发阶段逐步注册。
+MVP 命令结构见需求分析 0x0F。
 """
 
 from __future__ import annotations

@@ -233,7 +233,7 @@ def _make_search_response(
 @pytest.mark.anyio
 async def test_non_target_products_are_skipped() -> None:
     """classify() 返回 None 的记录被产出为 SkippedCandidate（AC-08）。"""
-    # 2502 中混入的工业边缘计算网关不属于 README 五类。
+    # 2502 中混入的工业边缘计算网关不属于需求分析定义的五类。
     mock_data = _make_search_response(
         [
             {
