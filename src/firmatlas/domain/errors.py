@@ -26,3 +26,7 @@ class ActiveDownloadExistsError(RepositoryError):
 
 class InvalidTransitionError(RepositoryError):
     """下载记录的状态机不允许本次变迁。"""
+
+
+class ProcessLockError(FirmAtlasError):
+    """同一数据目录已有另一个 FirmAtlas 进程正在运行。"""

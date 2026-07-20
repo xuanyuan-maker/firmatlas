@@ -6,12 +6,16 @@ crawl 命令通过 monkeypatch 替换 registry.build_adapter 注入假适配器�
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 from click.testing import CliRunner
 
 from firmatlas.adapters.events import DiscoveredProduct, DiscoveryCompleted
 from firmatlas.app import registry
 from firmatlas.cli.main import cli
+from firmatlas.infra import database
+from firmatlas.infra.repository import SqliteUnitOfWorkFactory
 
 
 @pytest.fixture(autouse=True)
@@ -147,3 +151,27 @@ def test_runs_empty(tmp_path):
     result = runner.invoke(cli, ["--data-dir", data, "runs"])
     assert result.exit_code == 0
     assert "暂无采集记录" in result.output
+
+
+def test_cli_startup_recovers_stale_crawl_run(tmp_path):
+    runner = CliRunner()
+    data_dir = tmp_path / "data"
+    result = runner.invoke(cli, ["--data-dir", str(data_dir), "init"])
+    assert result.exit_code == 0, result.output
+
+    engine = database.open_database(data_dir)
+    try:
+        with SqliteUnitOfWorkFactory(engine).begin() as uow:
+            source = uow.sources.get_by_source_key("tp-link-cn")
+            assert source is not None
+            stale = uow.runs.create_run(source_id=source.id, started_at=datetime.now(UTC))
+    finally:
+        engine.dispose()
+
+    result = runner.invoke(cli, ["--data-dir", str(data_dir), "runs"])
+
+    assert result.exit_code == 0, result.output
+    assert "已恢复上次异常中断的任务：采集 1，下载 0" in result.output
+    assert stale.id in result.output
+    assert "failed" in result.output
+    assert "异常终止" in result.output

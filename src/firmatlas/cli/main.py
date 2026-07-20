@@ -11,12 +11,14 @@ from dataclasses import asdict
 from pathlib import Path
 
 import click
+import sqlalchemy as sa
 
 from firmatlas import __version__
 from firmatlas.app import registry
 from firmatlas.app.crawl import CrawlReport, crawl_source
 from firmatlas.app.download import DownloadReport, download_artifact
 from firmatlas.app.queries import OUTPUT_SCHEMA_VERSION, CatalogFilter
+from firmatlas.app.recovery import recover_stale_operations
 from firmatlas.domain.errors import FirmAtlasError
 from firmatlas.domain.model import (
     DownloadStatus,
@@ -29,6 +31,7 @@ from firmatlas.infra import database
 from firmatlas.infra.artifact_store import ArtifactStore
 from firmatlas.infra.downloader import Downloader
 from firmatlas.infra.http_client import HttpFetcher, make_http_client
+from firmatlas.infra.process_lock import DataDirectoryLock
 from firmatlas.infra.query_service import SqliteCatalogQueryService
 from firmatlas.infra.repository import SqliteUnitOfWorkFactory
 
@@ -48,9 +51,34 @@ from firmatlas.infra.repository import SqliteUnitOfWorkFactory
 def cli(ctx: click.Context, data_dir: str, verbose: bool, no_color: bool) -> None:
     """FirmAtlas：IoT 固件目录采集与按需下载。"""
     ctx.ensure_object(dict)
+    lock = DataDirectoryLock(Path(data_dir))
+    try:
+        lock.acquire()
+    except FirmAtlasError as exc:
+        raise click.ClickException(str(exc)) from exc
+    ctx.call_on_close(lock.release)
     ctx.obj["data_dir"] = data_dir
     ctx.obj["verbose"] = verbose
     ctx.obj["no_color"] = no_color
+
+
+def _open_database_with_recovery(data_dir: Path) -> sa.Engine:
+    """打开数据库，并在当前进程独占数据目录时恢复遗留任务。"""
+    engine = database.open_database(data_dir)
+    try:
+        report = recover_stale_operations(
+            uow_factory=SqliteUnitOfWorkFactory(engine)
+        )
+    except BaseException:
+        engine.dispose()
+        raise
+    if report.crawl_runs_recovered or report.downloads_recovered:
+        click.echo(
+            "已恢复上次异常中断的任务："
+            f"采集 {report.crawl_runs_recovered}，下载 {report.downloads_recovered}。",
+            err=True,
+        )
+    return engine
 
 
 @cli.command(name="init")
@@ -61,7 +89,7 @@ def init_command(ctx: click.Context) -> None:
     try:
         result = database.initialize(data_dir)
         # 幂等写入内置来源（已存在的 source_key 跳过）
-        engine = database.open_database(data_dir)
+        engine = _open_database_with_recovery(data_dir)
         try:
             with SqliteUnitOfWorkFactory(engine).begin() as uow:
                 uow.sources.ensure_seed_sources(registry.seed_sources())
@@ -85,7 +113,7 @@ def crawl_command(ctx: click.Context, source_key: str) -> None:
     data_dir = Path(ctx.obj["data_dir"])
     try:
         registry.check_supported(source_key)
-        engine = database.open_database(data_dir)
+        engine = _open_database_with_recovery(data_dir)
     except FirmAtlasError as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -129,7 +157,7 @@ def sources_command(ctx: click.Context) -> None:
     """列出已注册的固件来源。"""
     data_dir = Path(ctx.obj["data_dir"])
     try:
-        engine = database.open_database(data_dir)
+        engine = _open_database_with_recovery(data_dir)
     except FirmAtlasError as exc:
         raise click.ClickException(str(exc)) from exc
     try:
@@ -157,7 +185,7 @@ def runs_command(ctx: click.Context, source_key: str | None, limit: int) -> None
     """列出采集运行历史（最新在前）。"""
     data_dir = Path(ctx.obj["data_dir"])
     try:
-        engine = database.open_database(data_dir)
+        engine = _open_database_with_recovery(data_dir)
     except FirmAtlasError as exc:
         raise click.ClickException(str(exc)) from exc
     try:
@@ -269,7 +297,7 @@ def list_command(
 
     data_dir = Path(ctx.obj["data_dir"])
     try:
-        engine = database.open_database(data_dir)
+        engine = _open_database_with_recovery(data_dir)
     except FirmAtlasError as exc:
         raise click.ClickException(str(exc)) from exc
     try:
@@ -322,7 +350,7 @@ def show_command(ctx: click.Context, release_id: str, output_format: str) -> Non
     """查看固件发布详情及其 Artifact 列表。"""
     data_dir = Path(ctx.obj["data_dir"])
     try:
-        engine = database.open_database(data_dir)
+        engine = _open_database_with_recovery(data_dir)
     except FirmAtlasError as exc:
         raise click.ClickException(str(exc)) from exc
     try:
@@ -378,7 +406,7 @@ def download_command(ctx: click.Context, artifact_ids: tuple[str, ...]) -> None:
     """下载固件并校验归档（接受 list 的发布 ID 或 show 的 Artifact ID，可用前缀）。"""
     data_dir = Path(ctx.obj["data_dir"])
     try:
-        engine = database.open_database(data_dir)
+        engine = _open_database_with_recovery(data_dir)
     except FirmAtlasError as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -518,7 +546,7 @@ def downloads_command(
     """列出下载历史（最新在前）。"""
     data_dir = Path(ctx.obj["data_dir"])
     try:
-        engine = database.open_database(data_dir)
+        engine = _open_database_with_recovery(data_dir)
     except FirmAtlasError as exc:
         raise click.ClickException(str(exc)) from exc
     try:

@@ -720,7 +720,12 @@ def _download_from_row(row: sa.Row) -> DownloadRecord:
 # 下载记录状态机：downloading → downloading 用于过程中更新进度字段
 _ALLOWED_TRANSITIONS: dict[DownloadStatus, frozenset[DownloadStatus]] = {
     DownloadStatus.QUEUED: frozenset(
-        {DownloadStatus.DOWNLOADING, DownloadStatus.FAILED, DownloadStatus.CANCELLED}
+        {
+            DownloadStatus.DOWNLOADING,
+            DownloadStatus.FAILED,
+            DownloadStatus.CANCELLED,
+            DownloadStatus.INTERRUPTED,
+        }
     ),
     DownloadStatus.DOWNLOADING: frozenset(
         {
