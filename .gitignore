@@ -6,6 +6,7 @@ AGENTS.md
 # Local planning and design docs
 PLAN.md
 docs/
+plugins/
 
 # Python
 .venv/
