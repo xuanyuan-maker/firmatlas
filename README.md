@@ -1098,29 +1098,15 @@
 
    ## 0x11 当前开发状态
 
-   项目当前处于需求分析和数据库设计阶段，尚未形成可安装的软件包。
+   项目已于 2026-07-20 完成 MVP 实现与正式验收，AC-01～AC-32 全部通过。
+   当前可通过 uv 安装和构建，并提供 TP-Link CN/US 元数据采集、SQLite 目录查询、
+   消失对账、按需下载、校验及原子归档能力。
 
-   当前已经确定：
+   详细的逐项证据、验证命令和非阻塞维护项见
+   [`docs/mvp-acceptance.md`](docs/mvp-acceptance.md)。
 
-   - 产品定义和 MVP 范围
-   - TP-Link CN/US 独立来源
-   - 产品分类边界
-   - 目录优先和按需下载
-   - 7 张 SQLite 表
-   - `source_key` 规则
-   - HTML/JSON fixture 策略
-   - 失效 Artifact 地址刷新
-   - 本地文件目录布局
-   - HTTP 默认策略
-   - CLI 命令结构
-   - Python 3.12、uv、HTTPX、SQLAlchemy Core
-   - MVP 不支持 CSV
-   - MVP 暂不引入数据库迁移工具
+   MVP 后的优先优化方向：
 
-   下一阶段：
-
-   1. 由本地编程 Agent 根据本文档提出 Adapter、Repository 和事务边界接口。
-   2. 评审接口设计，不直接生成全部实现。
-   3. 规划项目目录结构。
-   4. 创建最小项目骨架和测试环境。
-   5. 实现单一 TP-Link 来源的纵向切片。
+   1. 为 TP-Link US 型号抓取增加受配置约束的并发，缩短全量采集时间。
+   2. 以独立机械提交统一现有 Python 文件的 Ruff 格式。
+   3. 按需扩展 TP-Link CN 旧式固件标题解析，回补早期历史记录。
