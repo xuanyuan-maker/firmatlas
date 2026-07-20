@@ -6,8 +6,12 @@ from pathlib import Path
 import pytest
 
 from firmatlas.adapters.events import (
+    ArtifactRefreshFailed,
+    ArtifactRefreshRequest,
+    ArtifactUrlRefreshed,
     DiscoveredProduct,
     DiscoveryCompleted,
+    RefreshFailureReason,
     SkippedCandidate,
     SkipReason,
 )
@@ -195,3 +199,81 @@ async def test_redirect_outside_global_source_is_incomplete() -> None:
     assert isinstance(events[0], DiscoveryCompleted)
     assert events[0].is_complete is False
     assert "来源外" in (events[0].incomplete_reason or "")
+
+
+def _refresh_request(**overrides) -> ArtifactRefreshRequest:
+    fields = {
+        "product_source_key": ("2bcbebd8fa435660e52ef6ad398bdfca8a427d3eef382660b64647d2dd405b9e"),
+        "hardware_revision_source_key": UNSPECIFIED_REVISION_SOURCE_KEY,
+        "release_source_key": "fw/v5.9.15_260508",
+        "artifact_source_key": "S3000721729",
+        "stale_url": "https://assets.hikvision.com/expired/firmware.zip",
+        "known_filename": "Firmware__V5.9.15_260508_S3000721729.zip",
+        "known_size": None,
+        "known_checksum": None,
+    }
+    fields.update(overrides)
+    return ArtifactRefreshRequest(**fields)
+
+
+@pytest.mark.anyio
+async def test_refresh_finds_same_artifact_at_updated_url() -> None:
+    original = FIXTURE.read_text(encoding="utf-8")
+    updated_url = (
+        "https://assets.hikvision.com/prd/normal/all/files/202607/"
+        "Firmware_republished_V5.9.15_260508_S3000721729.zip"
+    )
+    updated = original.replace(
+        "https://assets.hikvision.com/prd/normal/all/files/202605/"
+        "Firmware__V5.9.15_260508_S3000721729.zip",
+        updated_url,
+    )
+    adapter = HikvisionGlobalAdapter(_MockHttpFetcher(updated))
+
+    result = await adapter.refresh_artifact_url(_refresh_request())
+
+    assert result == ArtifactUrlRefreshed(download_url=updated_url, url_expires_at=None)
+
+
+@pytest.mark.anyio
+async def test_refresh_rejects_hardware_identity_conflict() -> None:
+    adapter = HikvisionGlobalAdapter(_MockHttpFetcher(FIXTURE.read_text(encoding="utf-8")))
+
+    result = await adapter.refresh_artifact_url(_refresh_request(hardware_revision_source_key="v2"))
+
+    assert isinstance(result, ArtifactRefreshFailed)
+    assert result.reason_code is RefreshFailureReason.IDENTITY_CONFLICT
+
+
+@pytest.mark.anyio
+async def test_refresh_rejects_release_identity_conflict() -> None:
+    adapter = HikvisionGlobalAdapter(_MockHttpFetcher(FIXTURE.read_text(encoding="utf-8")))
+
+    result = await adapter.refresh_artifact_url(
+        _refresh_request(release_source_key="fw/v1.0.0_250101")
+    )
+
+    assert isinstance(result, ArtifactRefreshFailed)
+    assert result.reason_code is RefreshFailureReason.IDENTITY_CONFLICT
+
+
+@pytest.mark.anyio
+async def test_refresh_reports_missing_artifact() -> None:
+    adapter = HikvisionGlobalAdapter(_MockHttpFetcher(FIXTURE.read_text(encoding="utf-8")))
+
+    result = await adapter.refresh_artifact_url(_refresh_request(artifact_source_key="S9999999999"))
+
+    assert isinstance(result, ArtifactRefreshFailed)
+    assert result.reason_code is RefreshFailureReason.NOT_FOUND
+
+
+@pytest.mark.anyio
+async def test_refresh_reports_source_error() -> None:
+    adapter = HikvisionGlobalAdapter(
+        _MockHttpFetcher(text="", error=ConnectionError("simulated failure"))
+    )
+
+    result = await adapter.refresh_artifact_url(_refresh_request())
+
+    assert isinstance(result, ArtifactRefreshFailed)
+    assert result.reason_code is RefreshFailureReason.SOURCE_ERROR

@@ -16,8 +16,13 @@ from urllib.parse import unquote, urljoin, urlsplit
 
 from firmatlas.adapters.events import (
     AdapterIssueSummary,
+    ArtifactRefreshFailed,
+    ArtifactRefreshRequest,
+    ArtifactRefreshResult,
+    ArtifactUrlRefreshed,
     DiscoveredProduct,
     DiscoveryCompleted,
+    RefreshFailureReason,
     SkippedCandidate,
     SkipReason,
 )
@@ -150,6 +155,111 @@ class HikvisionGlobalAdapter:
                 f"{parse_failures} 个摄像机固件分组或文件解析失败" if parse_failures else None
             ),
             issues=tuple(issues),
+        )
+
+    async def refresh_artifact_url(self, request: ArtifactRefreshRequest) -> ArtifactRefreshResult:
+        """重新读取完整目录，并按三层稳定身份寻找同一 Artifact 的当前地址。"""
+        if request.hardware_revision_source_key != UNSPECIFIED_REVISION_SOURCE_KEY:
+            return ArtifactRefreshFailed(
+                reason_code=RefreshFailureReason.IDENTITY_CONFLICT,
+                detail=(
+                    "hikvision-global 未提供独立硬件版本，刷新请求的硬件版本身份不匹配: "
+                    f"{request.hardware_revision_source_key}"
+                ),
+            )
+
+        try:
+            fetched = await self._http.get_text(_INDEX_URL)
+        except Exception as exc:
+            return ArtifactRefreshFailed(
+                reason_code=RefreshFailureReason.SOURCE_ERROR,
+                detail=f"刷新时请求国际站固件目录失败: {exc}",
+            )
+
+        if not _is_expected_index_url(fetched.url):
+            return ArtifactRefreshFailed(
+                reason_code=RefreshFailureReason.SOURCE_ERROR,
+                detail=f"刷新时国际站固件目录重定向到来源外: {fetched.url}",
+            )
+
+        parsed = parse_firmware_products(fetched.text)
+        if not parsed:
+            return ArtifactRefreshFailed(
+                reason_code=RefreshFailureReason.SOURCE_ERROR,
+                detail="刷新时国际站固件目录未解析到产品",
+            )
+
+        product_found = False
+        artifact_release: str | None = None
+
+        for source_product in parsed:
+            if (source_product.main_category, source_product.sub_category) not in (
+                _CAMERA_CATEGORIES
+            ):
+                continue
+            product_url = _absolute_product_url(source_product.product_url)
+            if product_url is None:
+                continue
+            for group in source_product.groups:
+                matching_model = any(
+                    _product_source_key(product_url, _normalize_display_text(model))
+                    == request.product_source_key
+                    for model in group.applied_models
+                    if _normalize_display_text(model)
+                )
+                if not matching_model:
+                    continue
+                product_found = True
+
+                for asset in group.firmware_assets:
+                    if not asset.download_url:
+                        continue
+                    if _artifact_source_key(asset.download_url) != request.artifact_source_key:
+                        continue
+
+                    raw_version = extract_firmware_version(asset.title)
+                    normalized_version = _normalize_version(raw_version)
+                    if normalized_version is None:
+                        return ArtifactRefreshFailed(
+                            reason_code=RefreshFailureReason.SOURCE_ERROR,
+                            detail=(
+                                f"找到 Artifact {request.artifact_source_key}，"
+                                "但当前标题无法解析版本"
+                            ),
+                        )
+                    artifact_release = f"fw/{normalized_version.lower()}"
+                    if artifact_release != request.release_source_key:
+                        continue
+                    if not _is_asset_url(asset.download_url):
+                        return ArtifactRefreshFailed(
+                            reason_code=RefreshFailureReason.SOURCE_ERROR,
+                            detail=(
+                                f"找到 Artifact {request.artifact_source_key}，"
+                                "但当前下载地址不属于官方资源域名"
+                            ),
+                        )
+                    return ArtifactUrlRefreshed(
+                        download_url=asset.download_url,
+                        url_expires_at=None,
+                    )
+
+        if artifact_release is not None:
+            return ArtifactRefreshFailed(
+                reason_code=RefreshFailureReason.IDENTITY_CONFLICT,
+                detail=(
+                    f"Artifact {request.artifact_source_key} 当前属于 {artifact_release}，"
+                    f"与请求的 {request.release_source_key} 不一致"
+                ),
+            )
+
+        target = (
+            f"产品 {request.product_source_key} 下的 Artifact {request.artifact_source_key}"
+            if product_found
+            else f"产品 {request.product_source_key}"
+        )
+        return ArtifactRefreshFailed(
+            reason_code=RefreshFailureReason.NOT_FOUND,
+            detail=f"国际站当前目录未找到{target}，记录可能已下架",
         )
 
 
