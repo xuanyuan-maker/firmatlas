@@ -103,6 +103,7 @@ class HikvisionGlobalAdapter:
         products: dict[str, _ProductTree] = {}
         skipped: list[SkippedCandidate] = []
         issues: list[AdapterIssueSummary] = []
+        unmatched_release_notes: list[str] = []
         non_target_counts: Counter[tuple[str, str]] = Counter()
         parse_failures = 0
 
@@ -115,7 +116,20 @@ class HikvisionGlobalAdapter:
                 source_product,
                 products=products,
                 skipped=skipped,
-                issues=issues,
+                unmatched_release_notes=unmatched_release_notes,
+            )
+
+        if unmatched_release_notes:
+            examples = "; ".join(dict.fromkeys(unmatched_release_notes[:3]))
+            issues.append(
+                AdapterIssueSummary(
+                    code="release_note_unmatched",
+                    detail=(
+                        f"{len(unmatched_release_notes)} 条发布说明无法安全匹配固件版本"
+                        f"；示例: {examples}"
+                    ),
+                    source_url=_INDEX_URL,
+                )
             )
 
         for (main_category, sub_category), count in sorted(non_target_counts.items()):
@@ -268,7 +282,7 @@ def _collect_camera_product(
     *,
     products: dict[str, _ProductTree],
     skipped: list[SkippedCandidate],
-    issues: list[AdapterIssueSummary],
+    unmatched_release_notes: list[str],
 ) -> int:
     """把一个父级目录项展开到 Applied-to 型号树，返回解析失败数量。"""
     product_url = _absolute_product_url(source_product.product_url)
@@ -338,7 +352,11 @@ def _collect_camera_product(
                 failures += 1
             continue
 
-        notes_by_version = _match_release_notes(group.release_notes, issues, product_url)
+        notes_by_version = _match_release_notes(
+            group.release_notes,
+            available_versions=tuple(version_assets),
+            unmatched_release_notes=unmatched_release_notes,
+        )
         for model_raw in group.applied_models:
             model = _normalize_display_text(model_raw)
             if not model:
@@ -368,23 +386,34 @@ def _collect_camera_product(
 
 def _match_release_notes(
     notes: tuple[ReleaseNoteEntry, ...],
-    issues: list[AdapterIssueSummary],
-    product_url: str,
+    *,
+    available_versions: tuple[str, ...],
+    unmatched_release_notes: list[str],
 ) -> dict[str, ReleaseNoteEntry]:
     matched: dict[str, ReleaseNoteEntry] = {}
     for note in notes:
         version = _normalize_version(extract_firmware_version(note.title))
-        if version and note.url:
-            matched.setdefault(version, note)
-        else:
-            issues.append(
-                AdapterIssueSummary(
-                    code="release_note_unmatched",
-                    detail=f"发布说明无法匹配固件版本: {note.title or '<empty>'}",
-                    source_url=product_url,
-                )
-            )
+        target_version = _matching_release_version(version, available_versions)
+        if note.url and target_version:
+            matched.setdefault(target_version, note)
+            continue
+        unmatched_release_notes.append(note.title or "<empty>")
     return matched
+
+
+def _matching_release_version(
+    note_version: str | None,
+    available_versions: tuple[str, ...],
+) -> str | None:
+    """匹配发布说明版本；只有单版本分组允许标题不写版本。"""
+    if note_version in available_versions:
+        return note_version
+    if note_version:
+        compatible = [
+            version for version in available_versions if version.startswith(f"{note_version}_")
+        ]
+        return compatible[0] if len(compatible) == 1 else None
+    return available_versions[0] if len(available_versions) == 1 else None
 
 
 @dataclass
@@ -516,7 +545,8 @@ def _normalize_display_text(value: str) -> str:
 def _normalize_version(version: str | None) -> str | None:
     if not version:
         return None
-    normalized = re.sub(r"(?i)\s+BUILD\s+", "_", version.strip())
+    normalized = re.sub(r"(?i)[ _]+BUILD[ _]*", "_", version.strip())
+    normalized = re.sub(r"[ .](?=\d{6}$)", "_", normalized)
     return normalized.upper()
 
 

@@ -160,6 +160,83 @@ async def test_missing_asset_url_makes_discovery_incomplete() -> None:
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "release_note_title",
+    [
+        "IPC E6 5.5.821 Release Note",
+        "IPC E6 V5.5.821 build231108 Release Note",
+    ],
+)
+async def test_release_note_version_variants_match_single_group_version(
+    release_note_title: str,
+) -> None:
+    html = f"""
+    <div class="nav-item" data-main-tag="IP-Products" data-sub-tag="Network-Cameras">
+      <div class="main-title">
+        <a class="link" href="/en/products/IP-Products/Network-Cameras/camera-1/">Camera 1</a>
+      </div>
+      <div class="main-item">
+        <div class="firmware-section">
+          <a data-title="Firmware_V5.5.821_231108"
+             data-href="https://assets.hikvision.com/files/Firmware_V5.5.821_231108.zip">
+            Firmware
+          </a>
+        </div>
+        <div class="release-section">
+          <a data-title="{release_note_title}"
+             data-href="https://assets.hikvision.com/files/IPC_E6_5.5.821_Release_Note.pdf">
+            Release note
+          </a>
+        </div>
+        <ul class="sub-list"><li class="sub-item">CAMERA-1</li></ul>
+      </div>
+    </div>
+    """
+
+    events = await _discover(html)
+    release = _products(events)[0].hardware_revisions[0].releases[0]
+    completed = events[-1]
+
+    assert release.release_notes_url is not None
+    assert release.release_notes_url.endswith("IPC_E6_5.5.821_Release_Note.pdf")
+    assert isinstance(completed, DiscoveryCompleted)
+    assert completed.issues == ()
+
+
+@pytest.mark.anyio
+async def test_unmatched_release_notes_are_aggregated() -> None:
+    html = """
+    <div class="nav-item" data-main-tag="IP-Products" data-sub-tag="Network-Cameras">
+      <div class="main-title">
+        <a class="link" href="/en/products/IP-Products/Network-Cameras/camera-1/">Camera 1</a>
+      </div>
+      <div class="main-item">
+        <div class="firmware-section">
+          <a data-title="Firmware_V1.0.0_250101"
+             data-href="https://assets.hikvision.com/files/Firmware_V1.0.0_250101.zip">One</a>
+          <a data-title="Firmware_V2.0.0_250202"
+             data-href="https://assets.hikvision.com/files/Firmware_V2.0.0_250202.zip">Two</a>
+        </div>
+        <div class="release-section">
+          <a data-title="General Release Note"
+             data-href="https://assets.hikvision.com/files/general.pdf">Ambiguous</a>
+          <a data-title="Missing URL" href="#download-agreement">Missing</a>
+        </div>
+        <ul class="sub-list"><li class="sub-item">CAMERA-1</li></ul>
+      </div>
+    </div>
+    """
+
+    completed = (await _discover(html))[-1]
+
+    assert isinstance(completed, DiscoveryCompleted)
+    assert completed.is_complete is True
+    assert len(completed.issues) == 1
+    assert completed.issues[0].code == "release_note_unmatched"
+    assert "2 条" in completed.issues[0].detail
+
+
+@pytest.mark.anyio
 async def test_empty_page_is_incomplete() -> None:
     events = await _discover("<html><body>No firmware list</body></html>")
 
