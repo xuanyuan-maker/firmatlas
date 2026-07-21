@@ -1,0 +1,16 @@
+{
+  "errorCode": 0,
+  "message": "Operate Successfully",
+  "result": [
+    {
+      "typeId": 0,
+      "text": "Business",
+      "className": "for-business",
+      "children": [
+        {"typeId": 5745, "text": "Omada", "className": "omada-cloud-sdn"},
+        {"typeId": 5790, "text": "Omada Pro", "className": "omada-pro"}
+      ]
+    }
+  ],
+  "success": true
+}
