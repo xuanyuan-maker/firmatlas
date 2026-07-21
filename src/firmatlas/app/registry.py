@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from firmatlas.adapters.dlink_us.adapter import DlinkUsAdapter
 from firmatlas.adapters.hikvision_global.adapter import HikvisionGlobalAdapter
+from firmatlas.adapters.omada_global.adapter import OmadaGlobalAdapter
 from firmatlas.adapters.tplink_cn.adapter import TplinkCnAdapter
 from firmatlas.adapters.tplink_us.adapter import TplinkUsAdapter
 from firmatlas.app.crawl import SourceAdapter
@@ -89,6 +90,21 @@ def seed_sources() -> list[FirmwareSource]:
             created_at=now,
             updated_at=now,
         ),
+        FirmwareSource(
+            id=new_id(),
+            vendor_key="omada",
+            vendor_name="Omada",
+            source_key="omada-global",
+            name="Omada Worldwide 固件下载中心",
+            region_code="WW",
+            locale="en",
+            base_url="https://support.omadanetworks.com/en/",
+            adapter_key="omada_global",
+            discovery_method=DiscoveryMethod.API,
+            enabled=True,
+            created_at=now,
+            updated_at=now,
+        ),
     ]
 
 
@@ -96,6 +112,7 @@ def seed_sources() -> list[FirmwareSource]:
 _ADAPTER_BUILDERS = {
     "dlink-us": DlinkUsAdapter,
     "hikvision-global": HikvisionGlobalAdapter,
+    "omada-global": OmadaGlobalAdapter,
     "tp-link-cn": TplinkCnAdapter,
     "tp-link-us": TplinkUsAdapter,
 }
