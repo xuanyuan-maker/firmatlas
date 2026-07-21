@@ -67,3 +67,18 @@ def test_protocol_relative_official_url_is_normalized() -> None:
 
     assert len(materials) == 1
     assert materials[0].download_url.startswith("https://download.zyxel.com/")
+
+
+def test_pdf_under_firmware_path_is_release_note_not_firmware() -> None:
+    html = (
+        '<a href="https://download.zyxel.com/USG_FLEX_100H/firmware/'
+        'USG%20FLEX%20100H_1.38(ABXF.0)C0_2.pdf">Release Note</a>'
+    )
+
+    materials = parse_download_materials(html)
+
+    assert len(materials) == 1
+    assert materials[0].material_type == "release_note"
+    assert materials[0].version_raw == "1.38(ABXF.0)C0"
+    assert materials[0].version_normalized == "1.38(ABXF.0)C0"
+    assert firmware_downloads(materials) == []

@@ -101,6 +101,8 @@ def _parse_material_url(raw_url: str) -> DownloadMaterial | None:
     filename = parts[-1].strip()
     if not material_type or not filename:
         return None
+    if material_type == "firmware" and PurePosixPath(filename).suffix.casefold() == ".pdf":
+        material_type = "release_note"
 
     version_raw, version_normalized = _extract_version(filename)
     return DownloadMaterial(
