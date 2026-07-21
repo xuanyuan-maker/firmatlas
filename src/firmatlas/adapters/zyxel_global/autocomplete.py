@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from collections.abc import Awaitable, Callable, Iterable
@@ -64,33 +65,39 @@ async def enumerate_product_models(
     search: SearchAutocomplete,
     *,
     result_limit: int = 25,
-    max_prefix_length: int = 8,
+    max_prefix_length: int = 2,
+    max_concurrency: int = 6,
     initial_prefixes: Iterable[str] = _DEFAULT_INITIAL_PREFIXES,
     suffixes: Iterable[str] = _DEFAULT_SUFFIXES,
 ) -> EnumerationResult:
-    """递归细分达到结果上限的前缀，并按 machine_name 去重。"""
-    queue = list(initial_prefixes)
+    """按层级并发枚举：同层前缀并行请求，饱和前缀在长度允许时向下细分。"""
     suffix_choices = tuple(suffixes)
-    seen_prefixes: set[str] = set()
     products: dict[str, ProductModelEntry] = {}
     saturated: list[str] = []
+    current_level: list[str] = [prefix.casefold() for prefix in initial_prefixes]
+    sem = asyncio.Semaphore(max_concurrency)
 
-    while queue:
-        prefix = queue.pop(0).casefold()
-        if prefix in seen_prefixes:
-            continue
-        seen_prefixes.add(prefix)
+    async def _search(prefix: str) -> list[ProductModelEntry]:
+        async with sem:
+            return await search(prefix)
 
-        entries = await search(prefix)
-        for entry in entries:
-            products.setdefault(entry.machine_name, entry)
+    for _depth in range(max_prefix_length + 1):
+        if not current_level:
+            break
 
-        if len(entries) < result_limit:
-            continue
-        if len(prefix) >= max_prefix_length:
-            saturated.append(prefix)
-            continue
-        queue.extend(f"{prefix}{suffix}" for suffix in suffix_choices)
+        tasks = {prefix: asyncio.ensure_future(_search(prefix)) for prefix in current_level}
+        next_level: list[str] = []
+        for prefix, task in tasks.items():
+            entries = await task
+            for entry in entries:
+                products.setdefault(entry.machine_name, entry)
+            if len(entries) < result_limit:
+                continue
+            if len(prefix) >= max_prefix_length:
+                saturated.append(prefix)
+                continue
+            next_level.extend(f"{prefix}{suffix}" for suffix in suffix_choices)
+        current_level = next_level
 
     return EnumerationResult(
         products=tuple(sorted(products.values(), key=lambda item: item.machine_name)),

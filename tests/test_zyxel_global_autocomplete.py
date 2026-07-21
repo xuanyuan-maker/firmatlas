@@ -58,7 +58,10 @@ async def test_saturated_prefix_is_recursively_split_and_deduplicated() -> None:
     )
 
     assert result.is_complete is True
-    assert calls == ["a", "aa", "ab"]
+    assert set(calls) == {"a", "aa", "ab"}
+    assert len(calls) == 3
+    assert calls[0] == "a"
+    assert set(calls[1:]) == {"aa", "ab"}
     assert [entry.machine_name for entry in result.products] == [
         "a-model",
         "aa-one",
