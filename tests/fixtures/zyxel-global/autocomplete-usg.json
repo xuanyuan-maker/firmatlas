@@ -1,0 +1,18 @@
+[
+  {
+    "value": "usg-flex-100h",
+    "label": "<span>USG FLEX 100H</span>"
+  },
+  {
+    "model_machine_name": "usg-flex-200h",
+    "model": "USG FLEX 200H"
+  },
+  {
+    "machine_name": "gs1920-24hpv2",
+    "display_name": "GS1920-24HPv2"
+  },
+  {
+    "value": "Not a machine name",
+    "label": "Invalid"
+  }
+]
