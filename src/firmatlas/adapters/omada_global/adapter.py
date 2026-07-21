@@ -51,7 +51,7 @@ _DOWNLOAD_HOST = "static.tp-link.com"
 
 _PRODUCT_KEY_PATTERN = re.compile(r"model-id:(\d+)\Z")
 _SIZE_PATTERN = re.compile(r"([0-9]+(?:\.[0-9]+)?)\s*(KB|MB|GB)", re.IGNORECASE)
-_SIZE_UNITS = {"KB": 1024, "MB": 1024**2, "GB": 1024**3}
+_SIZE_UNITS = {"KB": 1024, "MB": 1000 * 1024, "GB": 1000**2 * 1024}
 
 
 class OmadaGlobalAdapter:

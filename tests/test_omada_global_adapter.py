@@ -19,7 +19,7 @@ from firmatlas.adapters.events import (
     SkippedCandidate,
     SkipReason,
 )
-from firmatlas.adapters.omada_global.adapter import OmadaGlobalAdapter
+from firmatlas.adapters.omada_global.adapter import OmadaGlobalAdapter, _size_to_bytes
 from firmatlas.domain.model import ProductType
 from firmatlas.infra.http_client import FetchedJson
 
@@ -112,8 +112,33 @@ async def test_candidate_tree_preserves_region_revision_and_metadata() -> None:
         "Minimum firmware version applies.\n\nImproved system stability."
     )
     assert artifact.original_filename == "ER605_V2.20_2.4.4.zip"
-    assert artifact.advertised_size == int(26.2 * 1024**2)
+    assert artifact.advertised_size == 26_828_800
     assert artifact.media_type == "application/zip"
+
+
+@pytest.mark.parametrize(
+    ("size_text", "expected_bytes", "actual_bytes"),
+    [
+        ("26.20 MB", 26_828_800, 26_826_668),
+        ("41.16 MB", 42_147_840, 42_147_091),
+        ("62.04 MB", 63_528_960, 63_526_571),
+        ("38.33 MB", 39_249_920, 39_250_239),
+        ("11.15 MB", 11_417_600, 11_422_171),
+        ("20.47 MB", 20_961_280, 20_962_193),
+        ("20.36 MB", 20_848_640, 20_853_447),
+        ("21.99 MB", 22_517_760, 22_515_164),
+    ],
+)
+def test_omada_size_uses_1000_kibibytes_per_reported_mb(
+    size_text: str,
+    expected_bytes: int,
+    actual_bytes: int,
+) -> None:
+    converted = _size_to_bytes(size_text)
+
+    assert converted == expected_bytes
+    assert converted is not None
+    assert abs(converted - actual_bytes) <= 5 * 1024
 
 
 @pytest.mark.anyio
