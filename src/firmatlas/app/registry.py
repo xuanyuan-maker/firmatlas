@@ -14,6 +14,7 @@ from firmatlas.adapters.hikvision_global.adapter import HikvisionGlobalAdapter
 from firmatlas.adapters.omada_global.adapter import OmadaGlobalAdapter
 from firmatlas.adapters.tplink_cn.adapter import TplinkCnAdapter
 from firmatlas.adapters.tplink_us.adapter import TplinkUsAdapter
+from firmatlas.adapters.zyxel_global.adapter import ZyxelGlobalAdapter
 from firmatlas.app.crawl import SourceAdapter
 from firmatlas.domain.errors import FirmAtlasError
 from firmatlas.domain.ids import new_id
@@ -105,6 +106,21 @@ def seed_sources() -> list[FirmwareSource]:
             created_at=now,
             updated_at=now,
         ),
+        FirmwareSource(
+            id=new_id(),
+            vendor_key="zyxel",
+            vendor_name="Zyxel",
+            source_key="zyxel-global",
+            name="Zyxel Global 固件下载中心",
+            region_code="WW",
+            locale="en",
+            base_url="https://www.zyxel.com/global/en/",
+            adapter_key="zyxel_global",
+            discovery_method=DiscoveryMethod.HYBRID,
+            enabled=True,
+            created_at=now,
+            updated_at=now,
+        ),
     ]
 
 
@@ -115,6 +131,7 @@ _ADAPTER_BUILDERS = {
     "omada-global": OmadaGlobalAdapter,
     "tp-link-cn": TplinkCnAdapter,
     "tp-link-us": TplinkUsAdapter,
+    "zyxel-global": ZyxelGlobalAdapter,
 }
 
 _LEGACY_TLS_SOURCE_KEYS = frozenset({"dlink-us"})

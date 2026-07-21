@@ -65,6 +65,8 @@ def test_init_seeds_sources(tmp_path):
     assert "D-Link" in result.output
     assert "omada-global" in result.output
     assert "Omada" in result.output
+    assert "zyxel-global" in result.output
+    assert "Zyxel" in result.output
 
 
 def test_init_is_idempotent_for_seeds(tmp_path):
@@ -79,6 +81,7 @@ def test_init_is_idempotent_for_seeds(tmp_path):
     assert result.output.count("hikvision-global") == 1
     assert result.output.count("dlink-us") == 1
     assert result.output.count("omada-global") == 1
+    assert result.output.count("zyxel-global") == 1
 
 
 def test_sources_requires_init(tmp_path):
