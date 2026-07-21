@@ -14,37 +14,29 @@ def _fixture() -> str:
     return (FIXTURE_DIR / "download-usg-flex-100h.html").read_text(encoding="utf-8")
 
 
-def test_parse_all_material_urls_including_unselected_firmware_options() -> None:
+def test_parse_material_urls_from_realistic_fixture() -> None:
     materials = parse_download_materials(_fixture())
 
-    assert len(materials) == 5
+    assert len(materials) == 4
     assert [item.material_type for item in materials] == [
-        "firmware",
-        "firmware",
-        "firmware",
+        "release_note",
+        "release_note",
         "release_note",
         "datasheet",
     ]
-    assert [item.filename for item in materials[:3]] == [
-        "USG FLEX 100H_1.38(ABXF.0)C0.zip",
-        "USG FLEX 100H_V1.37(ABXF.1)C0.zip",
-        "USG FLEX 100H_1.36(ABXF.2)C0.zip",
+    assert [item.filename for item in materials] == [
+        "USG FLEX 100H_1.38(ABXF.0)C0_2.pdf",
+        "USG FLEX 100H_1.37(ABXF.1)C0_2.pdf",
+        "USG FLEX 100H_1.38(ABXF.0)C0_Release_Note.pdf",
+        "USG FLEX 100H_14.pdf",
     ]
 
 
-def test_firmware_downloads_exclude_other_materials_and_associate_release_note() -> None:
-    downloads = firmware_downloads(parse_download_materials(_fixture()))
+def test_firmware_downloads_empty_when_all_firmware_is_login_protected() -> None:
+    materials = parse_download_materials(_fixture())
+    downloads = firmware_downloads(materials)
 
-    assert [item.version_normalized for item in downloads] == [
-        "1.38(ABXF.0)C0",
-        "1.37(ABXF.1)C0",
-        "1.36(ABXF.2)C0",
-    ]
-    assert downloads[0].release_notes_url == (
-        "https://download.zyxel.com/USG_FLEX_100H/release_note/"
-        "USG%20FLEX%20100H_1.38(ABXF.0)C0_Release_Note.pdf"
-    )
-    assert downloads[1].release_notes_url is None
+    assert downloads == []
 
 
 def test_untrusted_and_malformed_urls_are_ignored() -> None:

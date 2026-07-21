@@ -76,9 +76,9 @@ def test_zyxel_global_cli_full_flow_and_recrawl(tmp_path, monkeypatch) -> None:
     first = runner.invoke(cli, ["--data-dir", data_dir, "crawl", "zyxel-global"])
     assert first.exit_code == 0, first.output
     assert "completed" in first.output
-    assert "产品 2" in first.output
-    assert "发布 4" in first.output
-    assert "Artifact 4" in first.output
+    assert "产品 1" in first.output
+    assert "发布 1" in first.output
+    assert "Artifact 1" in first.output
 
     listed = runner.invoke(
         cli,
@@ -94,9 +94,9 @@ def test_zyxel_global_cli_full_flow_and_recrawl(tmp_path, monkeypatch) -> None:
     )
     assert listed.exit_code == 0, listed.output
     payload = json.loads(listed.output)
-    assert payload["total"] == 4
+    assert payload["total"] == 1
     assert all(row["source_key"] == "zyxel-global" for row in payload["rows"])
-    assert {row["product_type"] for row in payload["rows"]} == {"router", "wireless_ap"}
+    assert {row["product_type"] for row in payload["rows"]} == {"wireless_ap"}
     assert {row["hardware"] for row in payload["rows"]} == {"unspecified"}
 
     release_id = payload["rows"][0]["release_id"]

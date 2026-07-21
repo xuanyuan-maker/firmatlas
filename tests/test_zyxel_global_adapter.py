@@ -53,7 +53,7 @@ class _MockHttpFetcher:
             text = self.page_overrides.get(
                 model,
                 {
-                    "usg-flex-100h": _fixture("download-usg-flex-100h.html"),
+                    "usg-flex-100h": _fixture("download-usg-flex-100h-synthetic.html"),
                     "nwa50ax": _fixture("download-nwa50ax.html"),
                 }[model],
             )
@@ -136,7 +136,7 @@ async def test_source_key_contract_is_stable() -> None:
 
 @pytest.mark.anyio
 async def test_unparsed_firmware_is_skipped_without_hiding_valid_versions() -> None:
-    html = _fixture("download-usg-flex-100h.html").replace(
+    html = _fixture("download-usg-flex-100h-synthetic.html").replace(
         "</section>",
         '<a href="https://download.zyxel.com/USG_FLEX_100H/firmware/legacy.zip">legacy</a>'
         "</section>",
