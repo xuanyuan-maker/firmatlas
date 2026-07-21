@@ -107,7 +107,8 @@ retry_backoff_base = 0.25
             return None
 
     class EmptyAdapter:
-        source_key = "tp-link-cn"
+        def __init__(self, source_key):
+            self.source_key = source_key
 
         async def discover(self):
             yield DiscoveryCompleted(is_complete=True, incomplete_reason=None, issues=())
@@ -122,10 +123,23 @@ retry_backoff_base = 0.25
 
     monkeypatch.setattr(cli_main, "make_http_client", make_client)
     monkeypatch.setattr(cli_main, "HttpFetcher", make_fetcher)
-    monkeypatch.setattr(registry, "build_adapter", lambda source_key, http: EmptyAdapter())
+    monkeypatch.setattr(
+        registry,
+        "build_adapter",
+        lambda source_key, http: EmptyAdapter(source_key),
+    )
 
     result = runner.invoke(cli, ["--config", str(config_path), "crawl", "tp-link-cn"])
 
     assert result.exit_code == 0, result.output
-    assert captured["client"] == {"request_timeout": 41.0, "connect_timeout": 7.0}
+    assert captured["client"] == {
+        "request_timeout": 41.0,
+        "connect_timeout": 7.0,
+        "legacy_tls": False,
+    }
     assert captured["fetcher"] == {"max_retries": 2, "retry_backoff_base": 0.25}
+
+    result = runner.invoke(cli, ["--config", str(config_path), "crawl", "dlink-us"])
+
+    assert result.exit_code == 0, result.output
+    assert captured["client"]["legacy_tls"] is True

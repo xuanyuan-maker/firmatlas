@@ -137,3 +137,5 @@ def test_dlink_us_registry_contract() -> None:
     assert source.locale == "en-US"
     assert source.adapter_key == "dlink_us"
     assert source.base_url == "https://support.dlink.com/"
+    assert registry.requires_legacy_tls("dlink-us") is True
+    assert registry.requires_legacy_tls("tp-link-us") is False

@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import asyncio
+import ssl
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -195,13 +196,22 @@ def make_http_client(
     *,
     request_timeout: float = _DEFAULT_REQUEST_TIMEOUT,
     connect_timeout: float = _DEFAULT_CONNECT_TIMEOUT,
+    legacy_tls: bool = False,
 ) -> httpx.AsyncClient:
     """创建带有项目默认超时策略的 AsyncClient。
 
+    ``legacy_tls`` 只供明确登记的旧厂商站点使用；证书和主机名验证仍然开启，
+    但允许与只支持 OpenSSL 安全级别 1 密码套件的旧服务器完成握手。
     调用方负责生命周期管理（async with client: ...）。
     """
+    verify: bool | ssl.SSLContext = True
+    if legacy_tls:
+        verify = ssl.create_default_context()
+        verify.set_ciphers("DEFAULT:@SECLEVEL=1")
+
     return httpx.AsyncClient(
         timeout=httpx.Timeout(request_timeout, connect=connect_timeout),
         headers={"User-Agent": "FirmAtlas/0.1"},
         follow_redirects=True,
+        verify=verify,
     )

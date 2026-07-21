@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import AsyncExitStack
 from dataclasses import asdict
 from pathlib import Path
 
@@ -160,6 +161,7 @@ def crawl_command(ctx: click.Context, source_key: str) -> None:
         async with make_http_client(
             request_timeout=config.http.request_timeout,
             connect_timeout=config.http.connect_timeout,
+            legacy_tls=registry.requires_legacy_tls(source_key),
         ) as client:
             http = HttpFetcher(
                 client,
@@ -464,15 +466,9 @@ def download_command(ctx: click.Context, artifact_ids: tuple[str, ...]) -> None:
 
     async def _run_all() -> None:
         nonlocal failures
-        async with make_http_client(
-            request_timeout=config.http.request_timeout,
-            connect_timeout=config.http.connect_timeout,
-        ) as client:
-            downloader = Downloader(
-                client,
-                read_timeout=config.download.read_timeout,
-                connect_timeout=config.download.connect_timeout,
-            )
+        async with AsyncExitStack() as stack:
+            clients = {}
+            downloaders = {}
             for raw_id in artifact_ids:
                 try:
                     artifact_id, source_key = _resolve_artifact(engine, uow_factory, raw_id)
@@ -480,6 +476,22 @@ def download_command(ctx: click.Context, artifact_ids: tuple[str, ...]) -> None:
                     failures += 1
                     click.echo(f"{raw_id}: {exc}", err=True)
                     continue
+                legacy_tls = registry.requires_legacy_tls(source_key)
+                if legacy_tls not in clients:
+                    clients[legacy_tls] = await stack.enter_async_context(
+                        make_http_client(
+                            request_timeout=config.http.request_timeout,
+                            connect_timeout=config.http.connect_timeout,
+                            legacy_tls=legacy_tls,
+                        )
+                    )
+                    downloaders[legacy_tls] = Downloader(
+                        clients[legacy_tls],
+                        read_timeout=config.download.read_timeout,
+                        connect_timeout=config.download.connect_timeout,
+                    )
+                client = clients[legacy_tls]
+                downloader = downloaders[legacy_tls]
                 adapter = _build_refreshing_adapter(source_key, client, config)
                 try:
                     report = await download_artifact(

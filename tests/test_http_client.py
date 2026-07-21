@@ -1,8 +1,11 @@
 """HTTP 客户端超时与重试配置测试。"""
 
+import ssl
+
 import httpx
 import pytest
 
+from firmatlas.infra import http_client
 from firmatlas.infra.http_client import HttpFetcher, make_http_client
 
 
@@ -29,6 +32,27 @@ async def test_make_http_client_uses_effective_timeouts():
         assert client.timeout.connect == 12.5
     finally:
         await client.aclose()
+
+
+def test_make_http_client_legacy_tls_keeps_certificate_verification(monkeypatch):
+    captured = {}
+
+    class FakeContext:
+        def set_ciphers(self, ciphers: str) -> None:
+            captured["ciphers"] = ciphers
+
+    context = FakeContext()
+    monkeypatch.setattr(ssl, "create_default_context", lambda: context)
+    monkeypatch.setattr(
+        http_client.httpx,
+        "AsyncClient",
+        lambda **options: captured.update(options) or object(),
+    )
+
+    make_http_client(legacy_tls=True)
+
+    assert captured["ciphers"] == "DEFAULT:@SECLEVEL=1"
+    assert captured["verify"] is context
 
 
 @pytest.mark.anyio

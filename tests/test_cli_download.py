@@ -141,6 +141,32 @@ connect_timeout = 6
     assert ScriptedDownloader.options == {"read_timeout": 75.0, "connect_timeout": 6.0}
 
 
+def test_download_uses_source_tls_profile(seeded_cli, monkeypatch):
+    """下载客户端按 Artifact 所属来源选择 TLS 配置。"""
+    runner, data, artifact_id = seeded_cli
+    captured = {}
+
+    class DummyClientContext:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, exc_type, exc_value, traceback):
+            return None
+
+    def make_client(**options):
+        captured.update(options)
+        return DummyClientContext()
+
+    monkeypatch.setattr(cli_main, "make_http_client", make_client)
+    monkeypatch.setattr(registry, "requires_legacy_tls", lambda source_key: True)
+    ScriptedDownloader.outcomes = [succeeded()]
+
+    result = runner.invoke(cli, ["--data-dir", data, "download", artifact_id])
+
+    assert result.exit_code == 0, result.output
+    assert captured["legacy_tls"] is True
+
+
 def test_download_accepts_id_prefix(seeded_cli):
     runner, data, artifact_id = seeded_cli
     ScriptedDownloader.outcomes = [succeeded()]

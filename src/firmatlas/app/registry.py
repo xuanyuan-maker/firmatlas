@@ -100,6 +100,8 @@ _ADAPTER_BUILDERS = {
     "tp-link-us": TplinkUsAdapter,
 }
 
+_LEGACY_TLS_SOURCE_KEYS = frozenset({"dlink-us"})
+
 
 def supported_source_keys() -> list[str]:
     return sorted(_ADAPTER_BUILDERS)
@@ -111,6 +113,12 @@ def check_supported(source_key: str) -> None:
         raise UnsupportedSourceError(
             f"不支持的来源 {source_key!r}，可用来源：{', '.join(supported_source_keys())}"
         )
+
+
+def requires_legacy_tls(source_key: str) -> bool:
+    """来源是否需要兼容旧 TLS 密码套件。"""
+    check_supported(source_key)
+    return source_key in _LEGACY_TLS_SOURCE_KEYS
 
 
 def build_adapter(source_key: str, http: HttpFetcher) -> SourceAdapter:
