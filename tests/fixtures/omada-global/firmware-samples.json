@@ -1,0 +1,40 @@
+{
+  "errorCode": 0,
+  "message": "Operate Successfully",
+  "result": [
+    {
+      "name": "ER605(UN) _V2.20_2.4.4 Build 20260630",
+      "title": "ER605(UN) _V2.20_2.4.4 Build 20260630",
+      "awsUrl": "https://static.tp-link.com/example/ER605_V2.20_2.4.4.zip",
+      "size": "26.20 MB",
+      "language": "English",
+      "publishDate": "07-16-2026",
+      "notes": "<p>Minimum firmware version applies.</p>",
+      "modificationsAndBugFixes": "<p>Improved system stability.</p>",
+      "releaseNotesUrl": "https://static.tp-link.com/example/ER605_V2.20_2.4.4.pdf"
+    },
+    {
+      "name": "EAP225(EU)_V3_5.2.3 Build 20250709",
+      "title": "EAP225(EU)_V3_5.2.3 Build 20250709",
+      "awsUrl": "https://static.tp-link.com/example/EAP225_V3_5.2.3.zip",
+      "size": "10.06 MB",
+      "language": "English",
+      "publishDate": "08-13-2025",
+      "notes": "",
+      "modificationsAndBugFixes": "<p>Updated firmware security.</p>",
+      "releaseNotesUrl": ""
+    },
+    {
+      "name": "ER7212PC(UN)_V2.20_2.3.1_20260117",
+      "title": "ER7212PC(UN)_V2.20_2.3.1_20260117",
+      "awsUrl": "https://static.tp-link.com/example/ER7212PC_V2.20_2.3.1.zip",
+      "size": "334.40 MB",
+      "language": "English",
+      "publishDate": "01-29-2026",
+      "notes": null,
+      "modificationsAndBugFixes": null,
+      "releaseNotesUrl": null
+    }
+  ],
+  "success": true
+}

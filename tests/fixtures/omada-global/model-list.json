@@ -1,0 +1,22 @@
+{
+  "errorCode": 0,
+  "message": "Operate Successfully",
+  "result": [
+    {
+      "modelId": 1402,
+      "modelName": "ER605",
+      "defaultImageUrl": "https://static.tp-link.com/example/er605.png"
+    },
+    {
+      "modelId": 110,
+      "modelName": "EAP225",
+      "defaultImageUrl": "https://static.tp-link.com/example/eap225.png"
+    },
+    {
+      "modelId": 968,
+      "modelName": "OC200",
+      "defaultImageUrl": "https://static.tp-link.com/example/oc200.png"
+    }
+  ],
+  "success": true
+}
