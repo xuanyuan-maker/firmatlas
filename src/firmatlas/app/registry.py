@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+from firmatlas.adapters.dlink_us.adapter import DlinkUsAdapter
 from firmatlas.adapters.hikvision_global.adapter import HikvisionGlobalAdapter
 from firmatlas.adapters.tplink_cn.adapter import TplinkCnAdapter
 from firmatlas.adapters.tplink_us.adapter import TplinkUsAdapter
@@ -73,11 +74,27 @@ def seed_sources() -> list[FirmwareSource]:
             created_at=now,
             updated_at=now,
         ),
+        FirmwareSource(
+            id=new_id(),
+            vendor_key="d-link",
+            vendor_name="D-Link",
+            source_key="dlink-us",
+            name="D-Link 美国支持站资源目录",
+            region_code="US",
+            locale="en-US",
+            base_url="https://support.dlink.com/",
+            adapter_key="dlink_us",
+            discovery_method=DiscoveryMethod.HTML,
+            enabled=True,
+            created_at=now,
+            updated_at=now,
+        ),
     ]
 
 
 # source_key → 接收 HttpFetcher、返回适配器的构造函数
 _ADAPTER_BUILDERS = {
+    "dlink-us": DlinkUsAdapter,
     "hikvision-global": HikvisionGlobalAdapter,
     "tp-link-cn": TplinkCnAdapter,
     "tp-link-us": TplinkUsAdapter,
