@@ -34,6 +34,16 @@ async def test_make_http_client_uses_effective_timeouts():
         await client.aclose()
 
 
+@pytest.mark.anyio
+async def test_make_http_client_accepts_socks_proxy_from_environment(monkeypatch):
+    """安装 HTTPX SOCKS extra 后，ALL_PROXY 不应导致客户端初始化失败。"""
+    monkeypatch.setenv("all_proxy", "socks5://127.0.0.1:10808")
+
+    client = make_http_client()
+
+    await client.aclose()
+
+
 def test_make_http_client_legacy_tls_keeps_certificate_verification(monkeypatch):
     captured = {}
 
