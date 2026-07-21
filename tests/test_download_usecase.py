@@ -134,6 +134,54 @@ def seeded_artifact_id(
 
 
 @pytest.fixture
+def seeded_omada_artifact_id(
+    uow_factory, make_source, make_product_candidate
+) -> str:
+    """入库一个 omada-global Artifact，供来源专用下载行为测试。"""
+    source = make_source(
+        vendor_key="omada",
+        vendor_name="Omada",
+        source_key="omada-global",
+        name="Omada Worldwide 固件下载中心",
+        region_code="WW",
+        locale="en",
+        base_url="https://support.omadanetworks.com/en/",
+        adapter_key="omada_global",
+    )
+    with uow_factory.begin() as uow:
+        uow.sources.ensure_seed_sources([source])
+        run = uow.runs.create_run(source_id=source.id, started_at=utc_now())
+        product = make_product_candidate(source_key="model-id:1402")
+        saved_product = uow.catalog.upsert_product(
+            source_id=source.id,
+            candidate=product,
+            run_id=run.id,
+            seen_at=utc_now(),
+        )
+        revision = product.hardware_revisions[0]
+        saved_revision = uow.catalog.upsert_hardware_revision(
+            product_id=saved_product.entity_id,
+            candidate=revision,
+            run_id=run.id,
+            seen_at=utc_now(),
+        )
+        release = revision.releases[0]
+        saved_release = uow.catalog.upsert_release(
+            hardware_revision_id=saved_revision.entity_id,
+            candidate=release,
+            run_id=run.id,
+            seen_at=utc_now(),
+        )
+        saved_artifact = uow.catalog.upsert_artifact(
+            release_id=saved_release.entity_id,
+            candidate=release.artifacts[0],
+            run_id=run.id,
+            seen_at=utc_now(),
+        )
+    return saved_artifact.entity_id
+
+
+@pytest.fixture
 def seeded_checksum_artifact_id(
     uow_factory, seeded_source, seeded_run, make_product_candidate,
     make_artifact_candidate, make_release_candidate, make_revision_candidate,
@@ -230,6 +278,24 @@ def test_success_without_official_checksum(uow_factory, seeded_artifact_id, data
     assert record.sha256 == CONTENT_SHA256
     assert record.final_relative_path == report.final_relative_path
     assert record.http_etag == '"tag1"'
+
+
+def test_omada_uses_source_specific_size_tolerance(
+    uow_factory,
+    seeded_omada_artifact_id,
+    data_dir,
+) -> None:
+    downloader = ScriptedDownloader([succeeded()])
+
+    report = run_download(
+        artifact_id=seeded_omada_artifact_id,
+        uow_factory=uow_factory,
+        downloader=downloader,
+        data_dir=data_dir,
+    )
+
+    assert report.status is DownloadStatus.COMPLETED
+    assert downloader.size_tolerances == [8 * 1024]
 
 
 def test_success_with_matching_sha256(
@@ -383,6 +449,7 @@ def test_404_triggers_refresh_then_success(uow_factory, seeded_artifact_id, data
         "https://www.tp-link.com.cn/",
         "https://www.tp-link.com.cn/",
     ]
+    assert downloader.size_tolerances == [1024, 1024]
     # 刷新请求带上了 Artifact 身份
     assert len(adapter.requests) == 1
     assert adapter.requests[0].artifact_source_key == "artifact-1"
@@ -396,6 +463,32 @@ def test_404_triggers_refresh_then_success(uow_factory, seeded_artifact_id, data
     assert record.url_refresh_count == 1
     assert record.attempt_count == 2
     assert record.resolved_url == "https://example.com/fw/new-url.zip"
+
+
+def test_omada_refresh_retry_keeps_source_specific_size_tolerance(
+    uow_factory,
+    seeded_omada_artifact_id,
+    data_dir,
+) -> None:
+    downloader = ScriptedDownloader([failed_404(), succeeded()])
+    adapter = ScriptedAdapter(
+        ArtifactUrlRefreshed(
+            download_url="https://static.tp-link.com/example/refreshed.zip",
+            url_expires_at=None,
+        )
+    )
+
+    report = run_download(
+        artifact_id=seeded_omada_artifact_id,
+        uow_factory=uow_factory,
+        downloader=downloader,
+        data_dir=data_dir,
+        adapter=adapter,
+    )
+
+    assert report.status is DownloadStatus.COMPLETED
+    assert report.url_refreshed is True
+    assert downloader.size_tolerances == [8 * 1024, 8 * 1024]
 
 
 def test_refresh_only_once(uow_factory, seeded_artifact_id, data_dir):

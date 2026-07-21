@@ -49,9 +49,10 @@ _REFRESHABLE_CODES = frozenset(
 # 再在用例层放大到 4 MiB，避免大文件下载时高频写 SQLite
 _PROGRESS_DB_THRESHOLD = 4 * 1024 * 1024
 
-# 大小校验容差（字节）：tp-link-cn 等来源只提供 KB 粒度的 advertised_size，
-# ×1024 后与精确文件字节数最多相差 1023 字节，故放宽到 1 KB 避免误判 size_mismatch
-_SIZE_TOLERANCE_BYTES = 1024
+# 大小校验容差（字节）：默认来源只需要覆盖 KB 粒度误差；Omada API 的 MB
+# 使用 1000 KiB 且只保留两位小数，理论舍入误差接近 5 KiB，单独放宽到 8 KiB。
+_DEFAULT_SIZE_TOLERANCE_BYTES = 1024
+_SIZE_TOLERANCE_BY_SOURCE = {"omada-global": 8 * 1024}
 
 
 class UnknownArtifactError(FirmAtlasError):
@@ -149,6 +150,9 @@ async def download_artifact(
     # --- 下载（进度节流落库）---------------------------------------------
     # Referer 用来源站点根地址：部分厂商下载服务器校验 Referer，缺失即 403
     referer = ctx.source.base_url
+    size_tolerance = _SIZE_TOLERANCE_BY_SOURCE.get(
+        ctx.source.source_key, _DEFAULT_SIZE_TOLERANCE_BYTES
+    )
     progress = _ProgressWriter(uow_factory=uow_factory, download_id=record.id)
     outcome = await downloader.download(
         url=url,
@@ -156,7 +160,7 @@ async def download_artifact(
         expected_size=ctx.artifact.advertised_size,
         on_progress=progress,
         referer=referer,
-        size_tolerance=_SIZE_TOLERANCE_BYTES,
+        size_tolerance=size_tolerance,
     )
 
     # --- 失效地址刷新：最多一次（AC-29）----------------------------------
@@ -194,7 +198,7 @@ async def download_artifact(
                 expected_size=ctx.artifact.advertised_size,
                 on_progress=progress,
                 referer=referer,
-                size_tolerance=_SIZE_TOLERANCE_BYTES,
+                size_tolerance=size_tolerance,
             )
         else:
             refresh_note = f"地址刷新失败（{refresh_result.reason_code}）: {refresh_result.detail}"
