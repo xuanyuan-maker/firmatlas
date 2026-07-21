@@ -1,0 +1,137 @@
+{
+  "code": "200",
+  "message": "OK",
+  "data": {
+    "page": 1,
+    "size": 10,
+    "total": 5,
+    "list": [
+      {
+        "firmware_id": "58914",
+        "firmware_name": "DH_IPC-HX8XSC-Vodka_MultiLang_PN_Stream3_V3.146.0000000.32.R.260708",
+        "firmware_url": "https://materialfile.dahuasecurity.com/uploads/cpq/85592/firmware/DH_IPC-HX8XSC-Vodka_MultiLang_PN_Stream3_V3.146.0000000.32.R.260708.zip",
+        "firmware_updates": "",
+        "firmware_note": "https://materialfile.dahuasecurity.com/uploads/cpq/85592/firmware/release_notes.pdf",
+        "firmware_file_size": "356.51MB",
+        "post_date": "2026-07-21",
+        "md5": "fakesum00000000000011111111111111",
+        "hash": "fakesha256000000000000000000001111111111111111111111111111111111",
+        "original_name": "DH_IPC-HX8XSC-Vodka_MultiLang_PN_Stream3_V3.146.0000000.32.R.260708",
+        "product": [
+          {
+            "product_id": "154301",
+            "product_name": "IPC-HFW8449J-Z-SC",
+            "product_keywords": "https://www.dahuasecurity.com/products/network-products/network-cameras/ipc-hfw8449j-z-sc",
+            "menu_id": "118225",
+            "edition": "S0"
+          }
+        ]
+      },
+      {
+        "firmware_id": "58913",
+        "firmware_name": "DH_IPC-HX2XXX-Vodka_MultiLang_PN_Stream3_V3.146.0000000.32.R.260708",
+        "firmware_url": "https://materialfile.dahuasecurity.com/uploads/cpq/82432/firmware/DH_IPC-HX2XXX-Vodka_MultiLang_PN_Stream3_V3.146.0000000.32.R.260708.zip",
+        "firmware_updates": "",
+        "firmware_note": "",
+        "firmware_file_size": "253.48MB",
+        "post_date": "2026-07-21",
+        "md5": "fakesum00000000000022222222222222",
+        "hash": "fakesha256000000000000000000002222222222222222222222222222222222",
+        "original_name": "DH_IPC-HX2XXX-Vodka_MultiLang_PN_Stream3_V3.146.0000000.32.R.260708",
+        "product": [
+          {
+            "product_id": "146777",
+            "product_name": "IPC-HDBW2449F-AS-E2-IL",
+            "product_keywords": "https://www.dahuasecurity.com/products/network-products/network-cameras/ipc-hdbw2449f-as-e2-il",
+            "menu_id": "14427",
+            "edition": "S0"
+          }
+        ]
+      },
+      {
+        "firmware_id": "58899",
+        "firmware_name": "DH_IPC-GX212X-Hugo_MultiLang_PN_V3.120.0000000.38.R.260623",
+        "firmware_url": "https://materialfile.dahuasecurity.com/uploads/cpq/86182/firmware/DH_IPC-GX212X-Hugo_MultiLang_PN_V3.120.0000000.38.R.260623.zip",
+        "firmware_updates": "",
+        "firmware_note": "https://materialfile.dahuasecurity.com/uploads/cpq/86182/firmware/release_notes.pdf",
+        "firmware_file_size": "78.07MB",
+        "post_date": "2026-07-13",
+        "md5": "fakesum00000000000033333333333333",
+        "hash": "fakesha256000000000000000000003333333333333333333333333333333333",
+        "original_name": "DH_IPC-GX212X-Hugo_MultiLang_PN_V3.120.0000000.38.R.260623",
+        "product": [
+          {
+            "product_id": "154375",
+            "product_name": "IPC-HDW21249T-S-IL",
+            "product_keywords": "https://www.dahuasecurity.com/products/network-products/network-cameras/ipc-hdw21249t-s-il",
+            "menu_id": "14427",
+            "edition": "S2"
+          },
+          {
+            "product_id": "154374",
+            "product_name": "IPC-HFW21249T-S-IL",
+            "product_keywords": "https://www.dahuasecurity.com/products/network-products/network-cameras/ipc-hfw21249t-s-il",
+            "menu_id": "14427",
+            "edition": "S2"
+          },
+          {
+            "product_id": "154370",
+            "product_name": "IPC-HFW21249T-AS-IL",
+            "product_keywords": "https://www.dahuasecurity.com/products/network-products/network-cameras/ipc-hfw21249t-as-il",
+            "menu_id": "14427",
+            "edition": "S2"
+          }
+        ]
+      },
+      {
+        "firmware_id": "58912",
+        "firmware_name": "DH_SD-Hugo-Rapid_MultiLang_PN_Stream2-Normal_V2.820.0000014.0.R.260710",
+        "firmware_url": "https://materialfile.dahuasecurity.com/uploads/cpq/83462/firmware/DH_SD-Hugo-Rapid_MultiLang_PN_Stream2-Normal_V2.820.0000014.0.R.260710.zip",
+        "firmware_updates": "",
+        "firmware_note": "https://materialfile.dahuasecurity.com/uploads/cpq/83462/firmware/release_notes.pdf",
+        "firmware_file_size": "54.62MB",
+        "post_date": "2026-07-21",
+        "md5": "fakesum00000000000044444444444444",
+        "hash": "fakesha256000000000000000000004444444444444444444444444444444444",
+        "original_name": "DH_SD-Hugo-Rapid_MultiLang_PN_Stream2-Normal_V2.820.0000014.0.R.260710",
+        "product": [
+          {
+            "product_id": "152448",
+            "product_name": "IPC-PTS2649C-3E3Z-4GB20",
+            "product_keywords": "https://www.dahuasecurity.com/products/wireless-products/4g-cameras/ipc-pts2649c-3e3z-4gb20",
+            "menu_id": "118201",
+            "edition": "S0"
+          }
+        ]
+      },
+      {
+        "firmware_id": "58883",
+        "firmware_name": "DH_IPC-GX2XXX-Hugo_MultiLang_PN_V3.120.0000000.38.R.260623",
+        "firmware_url": "https://materialfile.dahuasecurity.com/uploads/cpq/83074/firmware/DH_IPC-GX2XXX-Hugo_MultiLang_PN_V3.120.0000000.38.R.260623.zip",
+        "firmware_updates": "",
+        "firmware_note": "",
+        "firmware_file_size": "89.02MB",
+        "post_date": "2026-07-06",
+        "md5": "fakesum00000000000055555555555555",
+        "hash": "fakesha256000000000000000000005555555555555555555555555555555555",
+        "original_name": "DH_IPC-GX2XXX-Hugo_MultiLang_PN_V3.120.0000000.38.R.260623",
+        "product": [
+          {
+            "product_id": "152188",
+            "product_name": "IPC-HDW2649T-S-PRO",
+            "product_keywords": "https://www.dahuasecurity.com/products/network-products/network-cameras/ipc-hdw2649t-s-pro",
+            "menu_id": "18060",
+            "edition": "S0"
+          },
+          {
+            "product_id": "154375",
+            "product_name": "IPC-HDW21249T-S-IL",
+            "product_keywords": "https://www.dahuasecurity.com/products/network-products/network-cameras/ipc-hdw21249t-s-il",
+            "menu_id": "14427",
+            "edition": "S2"
+          }
+        ]
+      }
+    ]
+  }
+}

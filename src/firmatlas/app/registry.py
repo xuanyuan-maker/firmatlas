@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+from firmatlas.adapters.dahua_global.adapter import DahuaGlobalAdapter
 from firmatlas.adapters.dlink_us.adapter import DlinkUsAdapter
 from firmatlas.adapters.hikvision_global.adapter import HikvisionGlobalAdapter
 from firmatlas.adapters.omada_global.adapter import OmadaGlobalAdapter
@@ -31,6 +32,21 @@ def seed_sources() -> list[FirmwareSource]:
     """内置来源列表（id 每次新生成；ensure_seed_sources 按 source_key 幂等跳过已有行）。"""
     now = utc_now()
     return [
+        FirmwareSource(
+            id=new_id(),
+            vendor_key="dahua",
+            vendor_name="Dahua",
+            source_key="dahua-global",
+            name="Dahua 国际站固件下载中心",
+            region_code="WW",
+            locale="en",
+            base_url="https://www.dahuasecurity.com/download-center/firmware",
+            adapter_key="dahua_global",
+            discovery_method=DiscoveryMethod.API,
+            enabled=True,
+            created_at=now,
+            updated_at=now,
+        ),
         FirmwareSource(
             id=new_id(),
             vendor_key="tp-link",
@@ -126,6 +142,7 @@ def seed_sources() -> list[FirmwareSource]:
 
 # source_key → 接收 HttpFetcher、返回适配器的构造函数
 _ADAPTER_BUILDERS = {
+    "dahua-global": DahuaGlobalAdapter,
     "dlink-us": DlinkUsAdapter,
     "hikvision-global": HikvisionGlobalAdapter,
     "omada-global": OmadaGlobalAdapter,
