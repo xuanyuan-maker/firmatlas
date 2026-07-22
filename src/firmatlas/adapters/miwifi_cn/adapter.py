@@ -1,10 +1,9 @@
 """小米路由器 MiWiFi 下载页适配器。
 
-从 https://www1.miwifi.com/miwifi_download.html 提取产品列表，
-通过小米固件 API 获取每个产品的最新固件信息。
+从 index.json 提取产品清单，通过小米固件 API 获取最新固件信息。
 
 数据流：
-  HTML 页 → 提取 seelog[data] typeList 码
+  index.json → 解析 downloadList → 提取 model 与 typeList 码
   → 逐个调用 /upgrade/log/latest API
   → 按 model 分组 → ProductCandidate 树
   → yield DiscoveredProduct
@@ -18,6 +17,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
+from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from firmatlas.adapters.events import (
@@ -37,13 +37,8 @@ from firmatlas.domain.model import ArtifactType, ProductFamily, ProductType
 from firmatlas.infra.http_client import HttpFetcher
 
 _PAGE_URL = "https://www1.miwifi.com/miwifi_download.html"
+_INDEX_URL = "https://www1.miwifi.com/statics/json/index.json"
 _API_BASE = "https://api.miwifi.com/upgrade/log/latest"
-
-# 匹配 <a class="...seelog..." data="TYPE_CODE">
-_SEELOG_RE = re.compile(r'class="[^"]*seelog[^"]*"[^>]*data="([^"]+)"')
-
-# 从 typeList 码提取 model 码：RP04STA → RP04，RA70DEV → RA70
-_MODEL_RE = re.compile(r"^(.+?)(?:STA|DEV)(?:-\d+)?$")
 
 # JSONP 包装匹配：jQuery123({...}); 或 callback({...});
 _JSONP_RE = re.compile(r"^[\w$.]+\s*\((.+)\)\s*;?\s*$", re.DOTALL)
@@ -55,7 +50,7 @@ _MESH_KEYWORDS = ("mesh", "全屋")
 class MiwifiCnAdapter:
     """小米路由器中国站固件适配器。
 
-    从 MiWiFi 下载页提取所有产品，通过 API 获取最新固件信息。
+    从 index.json 提取产品清单，通过 API 获取最新固件信息。
     每个产品（model）可包含稳定版和开发版两个固件 Release。
     """
 
@@ -69,63 +64,61 @@ class MiwifiCnAdapter:
     # ------------------------------------------------------------------
 
     async def discover(self):
-        """执行发现流程：提取 typeList 码 → API 调用 → 构建候选树。"""
+        """执行发现流程：解析 index.json → API 调用 → 构建候选树。"""
 
-        # ── 步骤 1：获取 HTML，提取 typeList 码 ──
+        # ── 步骤 1：获取 index.json，提取 model 列表 ──
         try:
-            html_result = await self._http.get_text(_PAGE_URL)
-            type_codes = _extract_type_codes(html_result.text)
+            index_result = await self._http.get_text(_INDEX_URL)
+            entries = _parse_download_list(index_result.text)
         except Exception as exc:
             yield DiscoveryCompleted(
                 is_complete=False,
-                incomplete_reason=f"无法获取下载页 HTML: {exc}",
+                incomplete_reason=f"无法获取 index.json: {exc}",
                 issues=(),
             )
             return
 
-        if not type_codes:
+        if not entries:
             yield DiscoveryCompleted(
                 is_complete=False,
-                incomplete_reason="HTML 中未找到任何产品的 typeList 码",
+                incomplete_reason="index.json 中未找到产品列表",
                 issues=(),
             )
             return
 
         # ── 步骤 2：逐个调用 API，按 model 分组 ──
-        # model → 该产品的构建器（同一 model 的稳定版/开发版归入同一 Product）
         products: dict[str, _ProductBuilder] = {}
         issues: list[AdapterIssueSummary] = []
         api_failures = 0
 
-        for type_code in sorted(type_codes):
-            try:
-                entry = await _fetch_firmware(self._http, type_code)
-            except Exception as exc:
-                api_failures += 1
-                issues.append(
-                    AdapterIssueSummary(
-                        code="api_error",
-                        detail=f"产品 {type_code} API 请求失败: {exc}",
-                        source_url=f"{_API_BASE}?typeList={type_code}",
+        for entry in entries:
+            model = entry["model"]
+            title = entry.get("title", "")
+
+            type_codes = _type_codes_for_entry(entry)
+
+            for type_code in type_codes:
+                try:
+                    data = await _fetch_firmware(self._http, type_code)
+                except Exception as exc:
+                    api_failures += 1
+                    issues.append(
+                        AdapterIssueSummary(
+                            code="api_error",
+                            detail=f"产品 {type_code} API 请求失败: {exc}",
+                            source_url=f"{_API_BASE}?typeList={type_code}",
+                        )
                     )
-                )
-                continue
+                    continue
 
-            if entry is None:
-                continue  # API 返回空，静默跳过
+                if data is None:
+                    continue
 
-            model = _model_from_type_code(type_code)
-            if model is None:
-                continue  # 无法提取 model，跳过
+                variant = _variant_from_type_code(type_code)
 
-            variant = _variant_from_type_code(type_code)
-
-            if model not in products:
-                products[model] = _ProductBuilder(
-                    model=model,
-                    title=entry.get("title", ""),
-                )
-            products[model].add_release(type_code, variant, entry)
+                if model not in products:
+                    products[model] = _ProductBuilder(model=model, title=title)
+                products[model].add_release(type_code, variant, data)
 
         # ── 步骤 3：产出事件 ──
         discovered = 0
@@ -145,24 +138,80 @@ class MiwifiCnAdapter:
 
 
 # ---------------------------------------------------------------------------
-# HTML 解析
+# index.json 解析
 # ---------------------------------------------------------------------------
 
 
-def _extract_type_codes(html: str) -> list[str]:
-    """从 HTML 中提取所有 seelog 元素的 data 属性值（即 typeList 码）。
+def _parse_download_list(text: str) -> list[dict[str, Any]]:
+    """从 index.json 中提取 downloadList 数组。
 
-    页面中每个固件条目都有一个 <a class="seelog" data="TYPE_CODE"> 元素，
-    data 值即为调用 /upgrade/log/latest API 所需的 typeList 参数。
+    index.json 是 JavaScript 格式（含尾逗号），不是合法 JSON。
+    需要手动清理后再解析。
     """
-    seen: set[str] = set()
-    result: list[str] = []
-    for match in _SEELOG_RE.finditer(html):
-        code = match.group(1)
-        if code not in seen:
-            seen.add(code)
-            result.append(code)
-    return result
+    idx = text.find("downloadList = [")
+    if idx == -1:
+        return []
+
+    # 定位数组起止位置（正确处理嵌套括号和字符串）
+    start = idx + len("downloadList = ")
+    depth = 0
+    end = start
+    in_string = False
+    escape = False
+    for i, ch in enumerate(text[start:], start=start):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+
+    raw = text[start:end]
+    if not raw:
+        return []
+
+    # 清理尾逗号后解析
+    cleaned = _strip_trailing_commas(raw)
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        return []
+
+
+def _strip_trailing_commas(json_text: str) -> str:
+    """移除 JSON 中对象/数组的尾逗号（处理 JS 风格 JSON）。"""
+    return re.sub(r",\s*([}\]])", r"\1", json_text)
+
+
+def _type_codes_for_entry(entry: dict[str, Any]) -> list[str]:
+    """根据 downloadList 条目生成 API typeList 码。
+
+    每个条目至少生成 {model}STA。
+    如果是开发版条目，同时生成 {model}DEV。
+    """
+    model = entry.get("model", "")
+    if not model:
+        return []
+
+    name = entry.get("name", "")
+    codes: list[str] = [f"{model}STA"]
+
+    if "开发版" in name:
+        codes.append(f"{model}DEV")
+
+    return codes
 
 
 # ---------------------------------------------------------------------------
@@ -220,17 +269,6 @@ def _parse_jsonp(text: str) -> dict | None:
 # ---------------------------------------------------------------------------
 # source_key 规则
 # ---------------------------------------------------------------------------
-
-
-def _model_from_type_code(type_code: str) -> str | None:
-    """从 typeList 码提取 model 码。
-
-    例：RP04STA → RP04, RA70DEV → RA70, R4ACSTA-220 → R4AC
-    """
-    m = _MODEL_RE.match(type_code)
-    if m:
-        return m.group(1)
-    return None
 
 
 def _variant_from_type_code(type_code: str) -> str:
