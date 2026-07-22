@@ -13,6 +13,7 @@ from firmatlas.adapters.dahua_global.adapter import DahuaGlobalAdapter
 from firmatlas.adapters.dlink_us.adapter import DlinkUsAdapter
 from firmatlas.adapters.draytek_global.adapter import DraytekGlobalAdapter
 from firmatlas.adapters.hikvision_global.adapter import HikvisionGlobalAdapter
+from firmatlas.adapters.miwifi_cn.adapter import MiwifiCnAdapter
 from firmatlas.adapters.omada_global.adapter import OmadaGlobalAdapter
 from firmatlas.adapters.tplink_cn.adapter import TplinkCnAdapter
 from firmatlas.adapters.tplink_us.adapter import TplinkUsAdapter
@@ -95,6 +96,21 @@ def seed_sources() -> list[FirmwareSource]:
         ),
         FirmwareSource(
             id=new_id(),
+            vendor_key="xiaomi",
+            vendor_name="Xiaomi",
+            source_key="miwifi-cn",
+            name="小米路由器 MiWiFi 下载页",
+            region_code="CN",
+            locale="zh-CN",
+            base_url="https://www1.miwifi.com/miwifi_download.html",
+            adapter_key="miwifi_cn",
+            discovery_method=DiscoveryMethod.API,
+            enabled=True,
+            created_at=now,
+            updated_at=now,
+        ),
+        FirmwareSource(
+            id=new_id(),
             vendor_key="d-link",
             vendor_name="D-Link",
             source_key="dlink-us",
@@ -162,6 +178,7 @@ _ADAPTER_BUILDERS = {
     "dlink-us": DlinkUsAdapter,
     "draytek-global": DraytekGlobalAdapter,
     "hikvision-global": HikvisionGlobalAdapter,
+    "miwifi-cn": MiwifiCnAdapter,
     "omada-global": OmadaGlobalAdapter,
     "tp-link-cn": TplinkCnAdapter,
     "tp-link-us": TplinkUsAdapter,
