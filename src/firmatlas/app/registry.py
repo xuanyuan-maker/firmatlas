@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from firmatlas.adapters.dahua_global.adapter import DahuaGlobalAdapter
 from firmatlas.adapters.dlink_us.adapter import DlinkUsAdapter
+from firmatlas.adapters.draytek_global.adapter import DraytekGlobalAdapter
 from firmatlas.adapters.hikvision_global.adapter import HikvisionGlobalAdapter
 from firmatlas.adapters.omada_global.adapter import OmadaGlobalAdapter
 from firmatlas.adapters.tplink_cn.adapter import TplinkCnAdapter
@@ -109,6 +110,21 @@ def seed_sources() -> list[FirmwareSource]:
         ),
         FirmwareSource(
             id=new_id(),
+            vendor_key="draytek",
+            vendor_name="DrayTek",
+            source_key="draytek-global",
+            name="DrayTek 全球固件 FTP 服务器",
+            region_code="WW",
+            locale="en",
+            base_url="https://fw.draytek.com.tw/",
+            adapter_key="draytek_global",
+            discovery_method=DiscoveryMethod.HTML,
+            enabled=True,
+            created_at=now,
+            updated_at=now,
+        ),
+        FirmwareSource(
+            id=new_id(),
             vendor_key="omada",
             vendor_name="Omada",
             source_key="omada-global",
@@ -144,6 +160,7 @@ def seed_sources() -> list[FirmwareSource]:
 _ADAPTER_BUILDERS = {
     "dahua-global": DahuaGlobalAdapter,
     "dlink-us": DlinkUsAdapter,
+    "draytek-global": DraytekGlobalAdapter,
     "hikvision-global": HikvisionGlobalAdapter,
     "omada-global": OmadaGlobalAdapter,
     "tp-link-cn": TplinkCnAdapter,

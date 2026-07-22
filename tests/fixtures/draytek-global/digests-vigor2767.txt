@@ -1,0 +1,7 @@
+//
+// File Checksum Integrity Verifier version 2.05.
+//
+MD5	SHA-1
+------------------------------------------------------------------------
+7effb10e19ea06fbedf318b72bbd82cc f460ba42820d266fbf04478a5a2d991e2f0bb244 .\DrayTek_Vigor2767_V5.4.0_release-note.pdf
+4d1c199822072055e32550ae29c1d929 a06829d1c1e142811fb1a74b158f178b006c0200 .\Vigor2767_v5.4.0.zip
