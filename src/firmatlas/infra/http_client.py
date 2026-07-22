@@ -5,8 +5,9 @@
 
 实现细节：
 - 总超时 30s，连接超时 10s
-- 5xx / 网络错误重试 3 次，指数退避（1s→2s→4s）
-- 4xx 不重试
+- 5xx / 429 / 网络错误重试 3 次，指数退避（1s→2s→4s）
+- 4xx（429 除外）不重试
+- 请求间可选最小间隔（request_interval），避免触发 WAF 速率限制
 - 重试耗尽后抛 FetchError；适配器可选择捕获后降级为 SkippedCandidate
 """
 
@@ -68,6 +69,7 @@ _DEFAULT_REQUEST_TIMEOUT = 30.0
 _DEFAULT_CONNECT_TIMEOUT = 10.0
 _MAX_RETRIES = 3
 _RETRY_BACKOFF_BASE = 1.0  # 秒：1, 2, 4
+_DEFAULT_REQUEST_INTERVAL = 0.5  # 秒：请求间最小间隔，避免触发 WAF
 
 
 class HttpFetcher:
@@ -83,10 +85,13 @@ class HttpFetcher:
         *,
         max_retries: int = _MAX_RETRIES,
         retry_backoff_base: float = _RETRY_BACKOFF_BASE,
+        request_interval: float = _DEFAULT_REQUEST_INTERVAL,
     ) -> None:
         self._client = client
         self._max_retries = max_retries
         self._retry_backoff_base = retry_backoff_base
+        self._request_interval = request_interval
+        self._last_request_time: float = 0.0
 
     # -- POST JSON（tp-link-cn search API 的核心调用） ------------------
 
@@ -139,6 +144,16 @@ class HttpFetcher:
 
     # -- 重试逻辑 -------------------------------------------------------
 
+    async def _throttle(self) -> None:
+        """请求间节流：确保两次请求之间至少有 _request_interval 秒间隔。"""
+        if self._request_interval <= 0:
+            return
+        now = asyncio.get_event_loop().time()
+        elapsed = now - self._last_request_time
+        if elapsed < self._request_interval:
+            await asyncio.sleep(self._request_interval - elapsed)
+        self._last_request_time = asyncio.get_event_loop().time()
+
     async def _retry(
         self,
         factory: Any,
@@ -148,6 +163,8 @@ class HttpFetcher:
         last_error: FetchError | None = None
 
         for attempt in range(self._max_retries + 1):
+            # 每次请求前节流（包括重试）
+            await self._throttle()
             try:
                 response = await factory()
             except httpx.TimeoutException:
@@ -170,8 +187,28 @@ class HttpFetcher:
                             text=response.text,
                         )
 
+                if response.status_code == 429:
+                    # 429 Too Many Requests — 可重试
+                    # 优先使用 Retry-After 头，否则用退避策略
+                    retry_after = response.headers.get("Retry-After")
+                    if retry_after is not None:
+                        try:
+                            retry_seconds = int(retry_after)
+                        except ValueError:
+                            retry_seconds = self._retry_backoff_base * (2 ** attempt)
+                    else:
+                        retry_seconds = self._retry_backoff_base * (2 ** attempt)
+                    last_error = FetchError(
+                        url, 429,
+                        f"rate limited: {response.text[:200]}",
+                    )
+                    # 429 的等待时间叠加在退避基础上
+                    if attempt < self._max_retries:
+                        await asyncio.sleep(retry_seconds)
+                    continue
+
                 if 400 <= response.status_code < 500:
-                    # 4xx 不重试
+                    # 4xx（429 除外）不重试
                     raise FetchError(
                         url, response.status_code,
                         f"client error: {response.text[:200]}",
@@ -211,7 +248,12 @@ def make_http_client(
 
     return httpx.AsyncClient(
         timeout=httpx.Timeout(request_timeout, connect=connect_timeout),
-        headers={"User-Agent": "FirmAtlas/0.1"},
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+                " (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            )
+        },
         follow_redirects=True,
         verify=verify,
     )

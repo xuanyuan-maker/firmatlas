@@ -92,9 +92,9 @@ def _make_release_source_key(
     return base
 
 
-def _make_artifact_source_key(dir_name: str, version: str) -> str:
-    """Artifact source_key 基于 FTP 路径的稳定身份（保留原始大小写）。"""
-    path = f"{dir_name}/Firmware/v{version}/{dir_name}_v{version}.zip"
+def _make_artifact_source_key(dir_name: str, version: str, filename: str) -> str:
+    """Artifact source_key 基于 FTP 路径和实际文件名的稳定身份（保留原始大小写）。"""
+    path = f"{dir_name}/Firmware/v{version}/{filename}"
     return f"draytek-ftp:{path}"
 
 
@@ -112,20 +112,6 @@ def _product_page_url(dir_name: str) -> str:
     """
     slug = dir_name.strip().lower().replace(" ", "-")
     return f"https://www.draytek.com/products/{slug}/"
-
-
-def _firmware_download_url(dir_name: str, version: str) -> str:
-    """构造固件下载 URL。
-
-    https://fw.draytek.com.tw/{dir_name}/Firmware/v{version}/{dir_name}_v{version}.zip
-    """
-    # URL 编码空格
-    encoded_dir = dir_name.strip().replace(" ", "%20")
-    encoded_filename = f"{dir_name.strip()}_v{version}.zip".replace(" ", "%20")
-    return (
-        f"https://fw.draytek.com.tw/{encoded_dir}/"
-        f"Firmware/v{version}/{encoded_filename}"
-    )
 
 
 def _clean_version(raw: str) -> str:
@@ -340,7 +326,11 @@ class DraytekGlobalAdapter:
         channel_label: str,
         product_dir_url: str,
     ) -> FirmwareReleaseCandidate | None:
-        """为单个 (产品, 版本, channel) 构建 FirmwareReleaseCandidate。"""
+        """为单个 (产品, 版本, channel) 构建 FirmwareReleaseCandidate。
+
+        版本目录中可能有一个或多个 .zip 固件变体（如 STD/MDM1-7），
+        每个变体生成独立的 FirmwareArtifactCandidate。
+        """
         cleaned_version = _clean_version(version)
         version_dir_url = f"{product_dir_url}Firmware/v{cleaned_version}/"
 
@@ -352,19 +342,16 @@ class DraytekGlobalAdapter:
 
         version_entries = parse_directory_listing(version_html.text, version_html.url)
 
-        # 查找 .zip 固件文件
-        zip_entry = next(
-            (e for e in version_entries if not e.is_directory and e.name.endswith(".zip")),
-            None,
-        )
-        if zip_entry is None:
+        # 收集所有 .zip 固件文件（可能有多变体）
+        zip_entries = [
+            e for e in version_entries
+            if not e.is_directory and e.name.lower().endswith(".zip")
+        ]
+        if not zip_entries:
             return None
 
-        download_url = _firmware_download_url(dir_name, cleaned_version)
-        release_key = _make_release_source_key(product_key, cleaned_version, channel_label)
-
-        # 解析 FIRMWARE.DIGESTS
-        checksum = await self._parse_digests(dir_name, cleaned_version, version_dir_url)
+        # 解析 FIRMWARE.DIGESTS，得到 filename → checksum 映射
+        digests_map = await self._parse_digests(version_dir_url)
 
         # 查找 release note PDF
         release_notes_url: str | None = None
@@ -381,15 +368,28 @@ class DraytekGlobalAdapter:
         if channel_label:
             title += f" ({channel_label})"
 
-        artifact = FirmwareArtifactCandidate(
-            source_key=_make_artifact_source_key(dir_name, cleaned_version),
-            artifact_type=ArtifactType.FIRMWARE,
-            original_filename=f"{dir_name}_v{cleaned_version}.zip",
-            download_url=download_url,
-            url_expires_at=None,
-            advertised_size=None,
-            media_type="application/zip",
-            official_checksum=checksum,
+        # 为每个 zip 变体创建 artifact
+        artifacts: list[FirmwareArtifactCandidate] = []
+        for zip_entry in zip_entries:
+            actual_filename = zip_entry.name
+            checksum = digests_map.get(actual_filename.casefold())
+            artifacts.append(
+                FirmwareArtifactCandidate(
+                    source_key=_make_artifact_source_key(
+                        dir_name, cleaned_version, actual_filename
+                    ),
+                    artifact_type=ArtifactType.FIRMWARE,
+                    original_filename=actual_filename,
+                    download_url=zip_entry.url,
+                    url_expires_at=None,
+                    advertised_size=None,
+                    media_type="application/zip",
+                    official_checksum=checksum,
+                )
+            )
+
+        release_key = _make_release_source_key(
+            product_key, cleaned_version, channel_label
         )
 
         return FirmwareReleaseCandidate(
@@ -401,16 +401,14 @@ class DraytekGlobalAdapter:
             release_notes=None,
             release_notes_url=release_notes_url,
             source_url=version_dir_url,
-            artifacts=(artifact,),
+            artifacts=tuple(artifacts),
         )
 
     async def _parse_digests(
         self,
-        dir_name: str,
-        version: str,
         version_dir_url: str,
-    ) -> OfficialChecksum | None:
-        """解析 FIRMWARE.DIGESTS 文件，提取 .zip 固件的 SHA-1 校验和。
+    ) -> dict[str, OfficialChecksum]:
+        """解析 FIRMWARE.DIGESTS 文件，返回 {casefold 文件名: OfficialChecksum} 映射。
 
         FIRMWARE.DIGESTS 格式:
             //
@@ -418,26 +416,25 @@ class DraytekGlobalAdapter:
             //
             MD5	SHA-1
             --------------------------------------------------------
-            <md5> <sha1> .\filename1
-            <md5> <sha1> .\filename2
+            <md5> <sha1> .\\filename1
+            <md5> <sha1> .\\filename2
         """
         digests_url = f"{version_dir_url}FIRMWARE.DIGESTS"
         try:
             fetched = await self._http.get_text(digests_url)
         except FetchError:
-            return None
+            return {}
 
-        target = f"{dir_name}_v{version}.zip".casefold()
+        result: dict[str, OfficialChecksum] = {}
         for line in fetched.text.splitlines():
             m = _DIGESTS_LINE.match(line.strip())
             if m is None:
                 continue
             sha1 = m.group(2).lower()
             filename = m.group(3).strip().casefold()
-            if filename == target:
-                return OfficialChecksum(algorithm="sha1", value=sha1)
+            result[filename] = OfficialChecksum(algorithm="sha1", value=sha1)
 
-        return None
+        return result
 
     # -- refresh_artifact_url --------------------------------------------
 
@@ -447,9 +444,9 @@ class DraytekGlobalAdapter:
         """按产品名重新遍历 FTP，找回同一 Artifact 的最新下载地址。
 
         DrayTek 的 Artifact source_key 格式为:
-            draytek-ftp:{dir_name}/Firmware/v{version}/{dir_name}_v{version}.zip
+            draytek-ftp:{dir_name}/Firmware/v{version}/{filename}
 
-        从中解析 dir_name 和 version，确认身份一致性后返回当前 URL。
+        从中解析 dir_name、version 和 filename，确认身份一致后返回当前 URL。
         """
         # 解析 source_key
         artifact_path = _parse_artifact_source_key(request.artifact_source_key)
@@ -461,6 +458,7 @@ class DraytekGlobalAdapter:
 
         dir_name = artifact_path[0]
         known_version = artifact_path[1]
+        known_filename = artifact_path[2]
 
         # 构造产品 FTP URL
         encoded_dir = dir_name.replace(" ", "%20")
@@ -501,25 +499,30 @@ class DraytekGlobalAdapter:
                 detail=f"版本目录 v{known_version} 已不存在，该固件可能已下架",
             )
 
-        # 构造当前下载 URL
-        download_url = _firmware_download_url(dir_name, known_version)
+        # 构造当前下载 URL（使用实际文件名）
+        encoded_filename = known_filename.replace(" ", "%20")
+        download_url = (
+            f"https://fw.draytek.com.tw/{encoded_dir}/"
+            f"Firmware/v{known_version}/{encoded_filename}"
+        )
         return ArtifactUrlRefreshed(
             download_url=download_url,
             url_expires_at=None,
         )
 
 
-def _parse_artifact_source_key(source_key: str) -> tuple[str, str] | None:
-    """从 artifact source_key 解析出 (dir_name, version)。
+def _parse_artifact_source_key(source_key: str) -> tuple[str, str, str] | None:
+    """从 artifact source_key 解析出 (dir_name, version, filename)。
 
-    source_key 格式: draytek-ftp:{dir_name}/Firmware/v{version}/{dir_name}_v{version}.zip
+    source_key 格式: draytek-ftp:{dir_name}/Firmware/v{version}/{filename}
+    示例: draytek-ftp:Vigor2866/Firmware/v4.5.3/Vigor2866_v4.5.3_STD.zip
     """
     prefix = "draytek-ftp:"
     if not source_key.startswith(prefix):
         return None
 
     path = source_key[len(prefix):]
-    # 格式: {dir_name}/Firmware/v{version}/{dir_name}_v{version}.zip
+    # 格式: {dir_name}/Firmware/v{version}/{filename}
     parts = path.split("/")
     if len(parts) < 4:
         return None
@@ -531,4 +534,5 @@ def _parse_artifact_source_key(source_key: str) -> tuple[str, str] | None:
     if not version:
         return None
 
-    return dir_name, version
+    filename = parts[3] if len(parts) >= 4 else ""
+    return dir_name, version, filename
