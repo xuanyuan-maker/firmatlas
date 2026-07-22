@@ -14,6 +14,7 @@ from firmatlas.adapters.dlink_us.adapter import DlinkUsAdapter
 from firmatlas.adapters.draytek_global.adapter import DraytekGlobalAdapter
 from firmatlas.adapters.hikvision_global.adapter import HikvisionGlobalAdapter
 from firmatlas.adapters.miwifi_cn.adapter import MiwifiCnAdapter
+from firmatlas.adapters.tenda_global.adapter import TendaGlobalAdapter
 from firmatlas.adapters.omada_global.adapter import OmadaGlobalAdapter
 from firmatlas.adapters.tplink_cn.adapter import TplinkCnAdapter
 from firmatlas.adapters.tplink_us.adapter import TplinkUsAdapter
@@ -169,6 +170,21 @@ def seed_sources() -> list[FirmwareSource]:
             created_at=now,
             updated_at=now,
         ),
+        FirmwareSource(
+            id=new_id(),
+            vendor_key="tenda",
+            vendor_name="Tenda",
+            source_key="tenda-global",
+            name="Tenda 全球站固件下载中心",
+            region_code="WW",
+            locale="en",
+            base_url="https://www.tendacn.com/download",
+            adapter_key="tenda_global",
+            discovery_method=DiscoveryMethod.API,
+            enabled=True,
+            created_at=now,
+            updated_at=now,
+        ),
     ]
 
 
@@ -181,6 +197,7 @@ _ADAPTER_BUILDERS = {
     "miwifi-cn": MiwifiCnAdapter,
     "omada-global": OmadaGlobalAdapter,
     "tp-link-cn": TplinkCnAdapter,
+    "tenda-global": TendaGlobalAdapter,
     "tp-link-us": TplinkUsAdapter,
     "zyxel-global": ZyxelGlobalAdapter,
 }

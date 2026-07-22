@@ -1,0 +1,12 @@
+{
+  "code": 200,
+  "msg": "操作成功",
+  "data": {
+    "current": 1,
+    "pages": 1,
+    "records": [],
+    "size": 0,
+    "total": 0
+  },
+  "success": true
+}

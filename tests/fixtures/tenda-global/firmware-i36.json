@@ -1,0 +1,23 @@
+{
+  "code": 200,
+  "msg": "操作成功",
+  "data": {
+    "records": [
+      {
+        "id": 683500123456789,
+        "title": "i36 V1.0 Firmware",
+        "version": "V1.0.0.6",
+        "file": "https://static.tenda.com.cn/document/2025/12/01/def456/i36V1.0mt_V1.0.0.6_TD01.zip",
+        "fileSize": 18432000,
+        "format": "zip",
+        "updateTime": "2025-12-01 10:00:00",
+        "linkProductOrClass": [683497529253957]
+      }
+    ],
+    "size": 1,
+    "total": 1,
+    "current": 1,
+    "pages": 1
+  },
+  "success": true
+}

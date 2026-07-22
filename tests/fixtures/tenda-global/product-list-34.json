@@ -1,0 +1,35 @@
+{
+  "code": 200,
+  "msg": "操作成功",
+  "data": {
+    "current": 1,
+    "pages": 1,
+    "records": [
+      {
+        "productId": 683497529253957,
+        "productModel": "i36",
+        "version": "",
+        "categoryId": 34,
+        "categoryName": "Ceiling AP",
+        "proPath": "i36",
+        "productName": "BE5010 Dual-Band WiFi7 Ceiling Access Point",
+        "state": 2,
+        "deleted": 0
+      },
+      {
+        "productId": 791,
+        "productModel": "i29",
+        "version": "",
+        "categoryId": 34,
+        "categoryName": "Ceiling AP",
+        "proPath": "i29",
+        "productName": "AX3000 Wi-Fi6 Long-Range Access Point",
+        "state": 2,
+        "deleted": 0
+      }
+    ],
+    "size": 2,
+    "total": 2
+  },
+  "success": true
+}

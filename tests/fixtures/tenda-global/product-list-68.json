@@ -1,0 +1,35 @@
+{
+  "code": 200,
+  "msg": "操作成功",
+  "data": {
+    "current": 1,
+    "pages": 1,
+    "records": [
+      {
+        "productId": 757594406256709,
+        "productModel": "BE12 Pro",
+        "version": "",
+        "categoryId": 68,
+        "categoryName": "Wi-Fi 7 Routers",
+        "proPath": "BE12Pro",
+        "productName": "BE7200 Wi-Fi 7 Dual-Band Router",
+        "state": 2,
+        "deleted": 0
+      },
+      {
+        "productId": 941,
+        "productModel": "RE6L Pro",
+        "version": "",
+        "categoryId": 68,
+        "categoryName": "Wi-Fi 7 Routers",
+        "proPath": "RE6LPro",
+        "productName": "AX5400 Wi-Fi 7 Dual-Band Router",
+        "state": 2,
+        "deleted": 0
+      }
+    ],
+    "size": 2,
+    "total": 2
+  },
+  "success": true
+}

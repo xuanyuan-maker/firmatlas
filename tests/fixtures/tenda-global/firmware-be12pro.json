@@ -1,0 +1,43 @@
+{
+  "code": 200,
+  "msg": "操作成功",
+  "data": {
+    "records": [
+      {
+        "id": 810284475428933,
+        "title": "BE12 ProV1.0 Firmware",
+        "version": "V16.03.66.23",
+        "file": "https://static.tenda.com.cn/document/2026/05/28/6f27d9633136432eb763f4996ddedbc7/US_BE12ProV1.0mt_V16.03.66.23_TD01.zip",
+        "fileSize": 34765295,
+        "format": "zip",
+        "updateTime": "2026-05-28 17:16:00",
+        "linkProductOrClass": [757594406256709]
+      },
+      {
+        "id": 802851226992709,
+        "title": "BE12 Pro V1.0 Firmware",
+        "version": "V16.03.66.21",
+        "file": "https://static.tenda.com.cn/document/2026/05/07/b034a2d0290e4009934e98ed46df0d90/US_BE12ProV1.0mt_V16.03.66.21_TD01.zip",
+        "fileSize": 34736618,
+        "format": "zip",
+        "updateTime": "2026-05-07 17:10:02",
+        "linkProductOrClass": [757594406256709]
+      },
+      {
+        "id": 769501554372677,
+        "title": "BE12 Pro Firmware",
+        "version": "V16.03.66.18",
+        "file": "https://static.tenda.com.cn/document/2026/02/02/b43d67373f794b72bf327950a904f785/BE12ProV1.0mt_V16.03.66.18_TD01.zip",
+        "fileSize": 34352714,
+        "format": "zip",
+        "updateTime": "2026-02-02 11:29:53",
+        "linkProductOrClass": [757594406256709]
+      }
+    ],
+    "size": 3,
+    "total": 3,
+    "current": 1,
+    "pages": 1
+  },
+  "success": true
+}

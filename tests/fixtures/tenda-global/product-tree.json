@@ -1,0 +1,31 @@
+{
+  "code": 200,
+  "msg": "操作成功",
+  "data": [
+    {
+      "categoryId": 68,
+      "treeLevel": 3,
+      "name": "Wi-Fi 7 Routers",
+      "urlFlag": "wifi7-routers",
+      "list": [],
+      "productList": []
+    },
+    {
+      "categoryId": 34,
+      "treeLevel": 3,
+      "name": "Ceiling AP",
+      "urlFlag": "ceiling-ap",
+      "list": [],
+      "productList": []
+    },
+    {
+      "categoryId": 31,
+      "treeLevel": 3,
+      "name": "Home Security",
+      "urlFlag": "soho",
+      "list": [],
+      "productList": []
+    }
+  ],
+  "success": true
+}
