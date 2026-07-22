@@ -3,8 +3,8 @@
 FirmAtlas 是一款面向个人漏洞研究者的 IoT 固件发现与按需获取命令行工具。它从厂商公开渠道采集固件元数据，建立可查询的本地 SQLite 目录；只有用户明确选择 Artifact 后才下载文件，并在校验成功后归档。
 
 项目已完成 MVP，并在此基础上支持 TP-Link 中国站、TP-Link 美国站、海康威视国际站、
-D-Link 美国站、Omada Worldwide、Zyxel Global、大华国际站、DrayTek 全球站和
-小米路由器中国站九个相互隔离的数据来源。
+D-Link 美国站、Omada Worldwide、Zyxel Global、大华国际站、DrayTek 全球站、
+小米路由器中国站和 Tenda 全球站十个相互隔离的数据来源。
 MVP 的全部 32 项验收标准已经通过。
 
 ## 核心能力
@@ -30,6 +30,7 @@ MVP 的全部 32 项验收标准已经通过。
 | `dahua-global` | Dahua | WW（Worldwide） | 国际站固件下载 API（摄像机） |
 | `draytek-global` | DrayTek | WW（Worldwide） | FTP 固件服务器 Apache 目录列表 |
 | `miwifi-cn` | Xiaomi | CN | MiWiFi 下载页与固件 API |
+| `tenda-global` | Tenda | WW（Worldwide） | 全球站公开产品树与固件 API |
 
 标准产品类型为 `router`、`mesh_router`、`wireless_ap`、`cellular_cpe` 和 `camera`。交换机、无线网卡、独立控制器及其他范围外设备不会进入正式目录。
 
@@ -81,6 +82,7 @@ uv run firmatlas --data-dir data crawl zyxel-global
 uv run firmatlas --data-dir data crawl dahua-global
 uv run firmatlas --data-dir data crawl draytek-global
 uv run firmatlas --data-dir data crawl miwifi-cn
+uv run firmatlas --data-dir data crawl tenda-global
 ```
 
 如果当前终端的代理设置导致国际站访问异常，可以仅对本次采集临时取消代理环境变量：
@@ -102,6 +104,9 @@ uv run firmatlas --data-dir data list --source dahua-global --type camera
 uv run firmatlas --data-dir data list --source draytek-global --type router
 uv run firmatlas --data-dir data list --source draytek-global --type wireless_ap
 uv run firmatlas --data-dir data list --source miwifi-cn --type router
+uv run firmatlas --data-dir data list --source tenda-global --type router
+uv run firmatlas --data-dir data list --source tenda-global --type wireless_ap
+uv run firmatlas --data-dir data list --source tenda-global --type camera
 uv run firmatlas --data-dir data show <release-id>
 ```
 
@@ -152,7 +157,7 @@ uv run firmatlas --config firmatlas.toml --data-dir data config
 src/firmatlas/
 ├── domain/      # 领域模型、标识符和错误
 ├── app/         # 采集、查询、下载与恢复用例
-├── adapters/    # TP-Link、Hikvision、D-Link、DrayTek、Omada、Zyxel、Dahua 与小米来源适配器
+├── adapters/    # TP-Link、Hikvision、D-Link、DrayTek、Omada、Zyxel、Dahua、小米与 Tenda 来源适配器
 ├── infra/       # SQLite、HTTP、Repository、下载与归档
 └── cli/         # Click 命令行入口
 tests/           # pytest 测试与脱敏 fixture
