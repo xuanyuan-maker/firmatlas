@@ -15,6 +15,7 @@ from firmatlas.adapters.draytek_global.adapter import DraytekGlobalAdapter
 from firmatlas.adapters.hikvision_global.adapter import HikvisionGlobalAdapter
 from firmatlas.adapters.miwifi_cn.adapter import MiwifiCnAdapter
 from firmatlas.adapters.tenda_global.adapter import TendaGlobalAdapter
+from firmatlas.adapters.uniview_global.adapter import UniviewGlobalAdapter
 from firmatlas.adapters.omada_global.adapter import OmadaGlobalAdapter
 from firmatlas.adapters.tplink_cn.adapter import TplinkCnAdapter
 from firmatlas.adapters.tplink_us.adapter import TplinkUsAdapter
@@ -185,6 +186,21 @@ def seed_sources() -> list[FirmwareSource]:
             created_at=now,
             updated_at=now,
         ),
+        FirmwareSource(
+            id=new_id(),
+            vendor_key="uniview",
+            vendor_name="Uniview",
+            source_key="uniview-global",
+            name="宇视科技全球站固件下载中心",
+            region_code="US",
+            locale="en",
+            base_url="https://global.uniview.com/us/Support/Download_Center/Firmware/",
+            adapter_key="uniview_global",
+            discovery_method=DiscoveryMethod.HTML,
+            enabled=True,
+            created_at=now,
+            updated_at=now,
+        ),
     ]
 
 
@@ -199,6 +215,7 @@ _ADAPTER_BUILDERS = {
     "tp-link-cn": TplinkCnAdapter,
     "tenda-global": TendaGlobalAdapter,
     "tp-link-us": TplinkUsAdapter,
+    "uniview-global": UniviewGlobalAdapter,
     "zyxel-global": ZyxelGlobalAdapter,
 }
 
