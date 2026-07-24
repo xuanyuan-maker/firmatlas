@@ -126,7 +126,7 @@ retry_backoff_base = 0.25
     monkeypatch.setattr(
         registry,
         "build_adapter",
-        lambda source_key, http: EmptyAdapter(source_key),
+        lambda source_key, http, data_dir=None: EmptyAdapter(source_key),
     )
 
     result = runner.invoke(cli, ["--config", str(config_path), "crawl", "tp-link-cn"])

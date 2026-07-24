@@ -54,7 +54,7 @@ def _disable_proxies(monkeypatch) -> None:
 
 
 def test_zyxel_global_cli_full_flow_and_recrawl(tmp_path, monkeypatch) -> None:
-    def build_adapter(source_key, http):
+    def build_adapter(source_key, http, data_dir=None):
         assert source_key == "zyxel-global"
         return ZyxelGlobalAdapter(FixtureHttpFetcher())
 

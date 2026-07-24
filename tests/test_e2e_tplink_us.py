@@ -116,7 +116,7 @@ def test_e2e_us_recrawl_idempotent(engine, uow_factory, seeded_us_source):
 
 def test_e2e_us_cli_full_flow(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        registry, "build_adapter", lambda key, http: TplinkUsAdapter(FixtureHttpFetcher())
+        registry, "build_adapter", lambda key, http, data_dir=None: TplinkUsAdapter(FixtureHttpFetcher())
     )
     for var in ("all_proxy", "ALL_PROXY", "http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY"):
         monkeypatch.delenv(var, raising=False)
@@ -178,7 +178,7 @@ def test_cn_us_isolated_no_cross_region(tmp_path, monkeypatch):
             data = self._responses.get(key, {"result": {"total": 0, "collection": []}})
             return FetchedJson(url=url, status_code=200, data=data)
 
-    def build(key, http):
+    def build(key, http, data_dir=None):
         if key == "tp-link-cn":
             return TplinkCnAdapter(CnFetcher(cn_responses()))
         return TplinkUsAdapter(FixtureHttpFetcher())

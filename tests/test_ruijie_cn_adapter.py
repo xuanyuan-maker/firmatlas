@@ -3,22 +3,19 @@
 from __future__ import annotations
 
 import base64
-from pathlib import Path
 
 from firmatlas.adapters.ruijie_cn.adapter import (
+    _GOODS_ITEM_RE,
+    _GOODS_SPAN_RE,
+    _PRODUCT_LINK_RE,
     _classify_product_type,
     _extract_model,
-    _extract_version_name,
     _normalize_version,
     _parse_date,
     _parse_md5_base64,
     _url_slug,
-    _ROW_HREF_RE,
-    _PRODUCT_LINK_RE,
 )
 from firmatlas.domain.model import ProductType
-
-FIXTURE_DIR = Path(__file__).parent / "fixtures" / "ruijie-cn"
 
 
 class TestUrlSlug:
@@ -137,71 +134,57 @@ class TestProductLinkRegex:
         assert len(matches) == 3
 
 
-class TestRowHrefRegex:
-    def test_extract_vid(self) -> None:
-        html = """<tr onclick="rowHref('291266', 'RGOS 11.0(5)B9P30')">"""
-        matches = _ROW_HREF_RE.findall(html)
-        assert matches == ["291266"]
+class TestGoodsSpanRegex:
+    """新版产品页 <span goodsId="..."> 提取。"""
 
-    def test_double_quotes(self) -> None:
-        html = '''<tr onclick="rowHref('290063', 'Version 1.0')">'''
-        matches = _ROW_HREF_RE.findall(html)
-        assert matches == ["290063"]
+    def test_extract_product_line_goods_id(self) -> None:
+        html = '<span data-id="abc-123" goodsId="1777604717224923138">RG-EG-E系列新一代智能安全网关</span>'
+        match = _GOODS_SPAN_RE.search(html)
+        assert match is not None
+        assert match.group(1) == "1777604717224923138"
+        assert match.group(2) == "RG-EG-E系列新一代智能安全网关"
 
-    def test_multiple_vids(self) -> None:
+    def test_extract_simple_span(self) -> None:
+        html = '<span goodsId="123456">X60 PRO</span>'
+        match = _GOODS_SPAN_RE.search(html)
+        assert match is not None
+        assert match.group(1) == "123456"
+        assert match.group(2) == "X60 PRO"
+
+    def test_no_match(self) -> None:
+        html = "<span>No goodsId here</span>"
+        assert _GOODS_SPAN_RE.search(html) is None
+
+
+class TestGoodsItemRegex:
+    """新版产品页 <div class="item" goodsId="..."> 提取。"""
+
+    def test_extract_single_model(self) -> None:
+        html = '<div class="item" style="cursor:pointer;" goodsId="2048582900152905729"> RG-EG-E3100-P </div>'
+        matches = _GOODS_ITEM_RE.findall(html)
+        assert len(matches) == 1
+        assert matches[0] == ("2048582900152905729", "RG-EG-E3100-P")
+
+    def test_extract_multiple_models(self) -> None:
         html = """
-        <tr onclick="rowHref('111', 'v1')">
-        <tr onclick="rowHref('222', 'v2')">
-        <tr onclick="rowHref('333', 'v3')">
+        <div class="item" style="cursor:pointer;" goodsId="111"> Model-A </div>
+        <div class="item" style="cursor:pointer;" goodsId="222"> Model-B </div>
+        <div class="item" style="cursor:pointer;" goodsId="333"> Model-C </div>
         """
-        matches = _ROW_HREF_RE.findall(html)
-        assert matches == ["111", "222", "333"]
+        matches = _GOODS_ITEM_RE.findall(html)
+        assert len(matches) == 3
+        assert matches[0] == ("111", "Model-A")
+        assert matches[2] == ("333", "Model-C")
 
-    def test_whitespace_variation(self) -> None:
-        html = """<tr onclick="rowHref ( '12345' , 'name' )">"""
-        matches = _ROW_HREF_RE.findall(html)
-        assert matches == ["12345"]
+    def test_skips_hidden_item(self) -> None:
+        """display:none 的 item 应该被跳过（goodsId 相同但 name 为空）。"""
+        html = '<div class="item" goodsId="999" style="display:none;cursor:pointer;"> </div>'
+        matches = _GOODS_ITEM_RE.findall(html)
+        # 空白 name 会被 findall 捕获，但后续 .strip() 会清空
+        # 正则本身不跳过，适配器会过滤空 name
+        assert len(matches) == 1
 
-
-class TestExtractVersionName:
-    def test_after_row_href(self) -> None:
-        # pos 指向 VID 引号之后的位置
-        prefix = "rowHref('291266'"
-        html = f"{prefix}, 'RGOS 11.0(5)B9P30') other content"
-        result = _extract_version_name(html, len(prefix), "291266")
-        assert result == "RGOS 11.0(5)B9P30"
-
-    def test_fallback_to_vid(self) -> None:
-        """无法解析版本名称时回退到 VID。"""
-        result = _extract_version_name("  no_version_here  ", 0, "12345")
-        assert result == "12345"
-
-
-class TestBuildReleaseFromDetail:
-    """测试从 API 响应构建 FirmwareReleaseCandidate。"""
-
-    def _make_detail_response(
-        self, vid: int, file_id: int, filename: str = "fw.bin", size: int = 1000000
-    ) -> dict:
-        """构造模拟的版本详情 API 响应。"""
-        return {
-            "code": 200,
-            "message": "success",
-            "data": {
-                "pageTitle": f"RG-RSR20-X1 {vid}",
-                "publishDate": "2025-06-15",
-                "versionStageStr": "正式版本",
-                "baseVersion": "",
-                "softFileList": [
-                    {
-                        "id": file_id,
-                        "filename": filename,
-                        "size": str(size),
-                        "md5": base64.b64encode(b"mockmd5hash1234").decode(),
-                        "softType": "版本",
-                        "updateTime": "2025-06-15",
-                        "downTotal": 100,
-                    }
-                ],
-            },
-        }
+    def test_no_match_on_non_item_div(self) -> None:
+        html = '<div class="other" goodsId="123">Not an item</div>'
+        matches = _GOODS_ITEM_RE.findall(html)
+        assert len(matches) == 0

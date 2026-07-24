@@ -51,8 +51,9 @@ _PROGRESS_DB_THRESHOLD = 4 * 1024 * 1024
 
 # 大小校验容差（字节）：默认来源只需要覆盖 KB 粒度误差；Omada API 的 MB
 # 使用 1000 KiB 且只保留两位小数，理论舍入误差接近 5 KiB，单独放宽到 8 KiB。
+# Dahua API 的 MB 保留两位小数，实际文件与声明的舍入误差约 4 KiB，同样放宽到 8 KiB。
 _DEFAULT_SIZE_TOLERANCE_BYTES = 1024
-_SIZE_TOLERANCE_BY_SOURCE = {"omada-global": 8 * 1024}
+_SIZE_TOLERANCE_BY_SOURCE = {"dahua-global": 8 * 1024, "omada-global": 8 * 1024}
 
 
 class UnknownArtifactError(FirmAtlasError):
@@ -133,8 +134,51 @@ async def download_artifact(
     tmp_rel = PurePosixPath("tmp/downloads") / f"{record.id}.part"
     tmp_path = data_dir / tmp_rel
 
-    # --- 事务②：置 downloading ------------------------------------------
+    # --- 占位符 URL 预解析（如 ruijie-cn 的 pending:{file_id}）-----------
     url = ctx.artifact.download_url
+    if url.startswith("pending:") and adapter is not None:
+        refresh_result = await adapter.refresh_artifact_url(
+            _build_refresh_request(ctx, url)
+        )
+        if isinstance(refresh_result, ArtifactUrlRefreshed):
+            url = refresh_result.download_url
+            with uow_factory.begin() as uow:
+                uow.catalog.update_artifact_url(
+                    artifact_id=artifact_id,
+                    download_url=url,
+                    url_expires_at=refresh_result.url_expires_at,
+                    resolved_at=utc_now(),
+                )
+        else:
+            # 占位符解析失败：直接标记失败，不尝试下载
+            tmp_path.unlink(missing_ok=True)
+            message = (
+                f"下载地址解析失败（{refresh_result.reason_code}）: {refresh_result.detail}"
+            )
+            with uow_factory.begin() as uow:
+                uow.downloads.transition(
+                    download_id=record.id,
+                    patch=DownloadPatch(
+                        status=DownloadStatus.FAILED,
+                        finished_at=utc_now(),
+                        error_code="url_resolve_failed",
+                        error_message=message,
+                    ),
+                )
+            return DownloadReport(
+                artifact_id=artifact_id,
+                download_id=record.id,
+                status=DownloadStatus.FAILED,
+                verification_status=VerificationStatus.NOT_CHECKED,
+                final_relative_path=None,
+                bytes_received=0,
+                sha256=None,
+                url_refreshed=False,
+                error_code="url_resolve_failed",
+                error_message=message,
+            )
+
+    # --- 事务②：置 downloading ------------------------------------------
     with uow_factory.begin() as uow:
         uow.downloads.transition(
             download_id=record.id,

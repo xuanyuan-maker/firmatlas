@@ -53,7 +53,7 @@ def _disable_proxies(monkeypatch) -> None:
 
 
 def test_omada_global_cli_full_flow_and_recrawl(tmp_path, monkeypatch) -> None:
-    def build_adapter(source_key, http):
+    def build_adapter(source_key, http, data_dir=None):
         assert source_key == "omada-global"
         return OmadaGlobalAdapter(FixtureHttpFetcher())
 

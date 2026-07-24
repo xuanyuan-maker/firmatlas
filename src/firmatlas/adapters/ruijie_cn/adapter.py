@@ -3,9 +3,9 @@
 从锐捷官网固件下载中心采集路由器/无线等产品的固件元数据。
 
 数据流：
-  分类页 HTML → 提取产品 URL 列表 → 逐个产品页提取 VID 列表
-  → 调版本详情 API (/getDetail/{vid}) → 调下载地址 API (/getDownUrl/{fileId})
-  → 构建 ProductCandidate 树 → yield DiscoveredProduct
+  分类页 HTML → 提取产品 URL 列表 → 逐个产品页提取 goodsId
+  → 调版本列表 API (POST /goods/new) → 调版本详情 API (/getDetail/{id})
+  → 调下载地址 API (/getDownUrl/{fileId}) → 构建 ProductCandidate 树 → yield DiscoveredProduct
 
 认证要求：需要 GW_ACCESS_TOKEN（浏览器登录后获取，约 8 小时有效）。
 
@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -63,8 +64,16 @@ _CATEGORY_PAGES: list[tuple[str, ProductType]] = [
 # 从分类页提取产品 URL 的正则
 _PRODUCT_LINK_RE = re.compile(r'href="(/fw/rj-cp-[^"]+)"')
 
-# 从产品页提取 VID 的正则
-_ROW_HREF_RE = re.compile(r"""rowHref\s*\(\s*['"](\d+)['"]""")
+# 从产品页提取产品线 goodsId（<span goodsId="...">）
+_GOODS_SPAN_RE = re.compile(r'<span[^>]*goodsId="(\d+)"[^>]*>([^<]+)</span>')
+
+# 从产品页提取子型号 goodsId（<div class="...item..." goodsId="...">）
+_GOODS_ITEM_RE = re.compile(
+    r'<div[^>]*class="[^"]*item[^"]*"[^>]*goodsId="(\d+)"[^>]*>\s*([^<]+?)\s*</div>'
+)
+
+# 版本 API 每页条数
+_VERSION_PAGE_SIZE = 50
 
 # 移动路由器关键词（覆盖为 cellular_cpe）
 _MOBILE_ROUTER_KW = ("移动", "5g", "4g", "3g", "nr", "lte")
@@ -165,10 +174,11 @@ class RuijieCnAdapter:
     async def refresh_artifact_url(
         self, request: ArtifactRefreshRequest
     ) -> ArtifactRefreshResult:
-        """下载地址失效时重新获取 OSS 临时链接。
+        """获取/刷新 OSS 临时下载链接。
 
-        artifact_source_key 格式: ruijie:{vid}:{file_id}
-        从 source_key 中提取 file_id 重新调用 getDownUrl API。
+        两种调用路径：
+        1. 首次下载：stale_url 为 pending:{file_id} 占位符
+        2. 地址失效：stale_url 为已过期的 OSS URL，从 source_key 提取 file_id
         """
         if self._token_info is None:
             return ArtifactRefreshFailed(
@@ -176,14 +186,27 @@ class RuijieCnAdapter:
                 detail="未配置锐捷登录 token",
             )
 
-        # 从 artifact_source_key 提取 file_id
-        parts = request.artifact_source_key.split(":")
-        if len(parts) < 3 or not parts[-1].isdigit():
-            return ArtifactRefreshFailed(
-                reason_code=RefreshFailureReason.NOT_FOUND,
-                detail=f"无法从 source_key 解析 file_id: {request.artifact_source_key}",
-            )
-        file_id = parts[-1]
+        stale = request.stale_url
+
+        # 路径 1：pending:{file_id} 占位符 → 直接从占位符提取 file_id
+        if stale.startswith("pending:"):
+            file_id_str = stale.split(":", 1)[1]
+            if not file_id_str.isdigit():
+                return ArtifactRefreshFailed(
+                    reason_code=RefreshFailureReason.NOT_FOUND,
+                    detail=f"无效的 pending URL 格式: {stale}",
+                )
+            file_id = file_id_str
+        else:
+            # 路径 2：从 artifact_source_key 提取 file_id
+            # 格式: ruijie:{version_id}:{file_id}
+            parts = request.artifact_source_key.split(":")
+            if len(parts) < 3 or not parts[-1].isdigit():
+                return ArtifactRefreshFailed(
+                    reason_code=RefreshFailureReason.NOT_FOUND,
+                    detail=f"无法从 source_key 解析 file_id: {request.artifact_source_key}",
+                )
+            file_id = parts[-1]
 
         try:
             url = await self._get_download_url(int(file_id))
@@ -250,7 +273,14 @@ class RuijieCnAdapter:
     # ------------------------------------------------------------------
 
     async def _discover_product(self, entry: _ProductEntry) -> ProductCandidate | None:
-        """从产品页面采集所有固件版本，组装为 ProductCandidate。"""
+        """从产品页面采集所有固件版本，组装为 ProductCandidate。
+
+        新版页面结构：
+        - <span goodsId="..."> 包含产品线名称和 goodsId
+        - <div class="item" goodsId="..."> 包含子型号名称和 goodsId
+        - 有子型号时为每个子型号创建独立 HardwareRevision
+        - 无子型号时使用产品线 goodsId，创建单一 UNSPECIFIED HardwareRevision
+        """
         # 1. 获取产品页 HTML
         try:
             fetched = await self._auth_get_text(entry.url)
@@ -259,53 +289,67 @@ class RuijieCnAdapter:
 
         html = fetched.text
 
-        # 2. 提取产品名称
-        title_match = re.search(r"<title>(.*?)</title>", html)
-        page_title = title_match.group(1) if title_match else ""
-        # 标题格式："RG-RSR20-X1系列接入路由器软件下载-锐捷网络"
-        product_name = page_title.replace("软件下载-锐捷网络", "").strip()
-        # 提取型号（系列名，如 "RG-RSR20-X1系列接入路由器" → "RG-RSR20-X1"）
+        # 2. 提取产品线 goodsId 及名称
+        span_match = _GOODS_SPAN_RE.search(html)
+        if not span_match:
+            return None
+        product_line_gid = span_match.group(1)
+        product_name = span_match.group(2).strip()
+
+        # 3. 提取子型号 goodsId 列表
+        raw_items = _GOODS_ITEM_RE.findall(html)
+        model_items: list[tuple[str, str]] = []
+        seen_gids: set[str] = set()
+        for gid, name in raw_items:
+            name = name.strip()
+            if gid and name and gid not in seen_gids:
+                seen_gids.add(gid)
+                model_items.append((gid, name))
+
+        # 4. 提取型号
         model = _extract_model(product_name)
 
-        # 3. 提取所有 VID
-        vids: list[tuple[str, str]] = []  # [(vid, version_name)]
-        for match in _ROW_HREF_RE.finditer(html):
-            vid = match.group(1)
-            # 版本名称从 rowHref 第二个参数或后续文本提取
-            name = _extract_version_name(html, match.end(), vid)
-            vids.append((vid, name))
+        # 5. 获取版本并构建 HardwareRevision
+        if model_items:
+            # 有子型号：为每个子型号创建独立 HardwareRevision
+            revisions: list[HardwareRevisionCandidate] = []
+            for model_gid, model_name in model_items:
+                releases = await self._get_releases_for_goods(model_gid, entry.url)
+                if releases:
+                    revisions.append(
+                        HardwareRevisionCandidate(
+                            source_key=f"ruijie:{_url_slug(entry.url)}:{model_gid}",
+                            raw_revision=model_name,
+                            normalized_revision=model_name,
+                            revision_explicit=True,
+                            source_url=entry.url,
+                            releases=tuple(releases),
+                        )
+                    )
+            if not revisions:
+                return None
+        else:
+            # 无子型号：使用产品线 goodsId
+            releases = await self._get_releases_for_goods(product_line_gid, entry.url)
+            if not releases:
+                return None
+            revisions = [
+                HardwareRevisionCandidate(
+                    source_key=UNSPECIFIED_REVISION_SOURCE_KEY,
+                    raw_revision=None,
+                    normalized_revision=UNSPECIFIED_REVISION,
+                    revision_explicit=False,
+                    source_url=None,
+                    releases=tuple(releases),
+                )
+            ]
 
-        if not vids:
-            return None  # 无固件版本
-
-        # 4. 逐个 VID 获取详情
-        releases: list[FirmwareReleaseCandidate] = []
-        for vid, vname in vids:
-            try:
-                release = await self._build_release(vid, vname, entry.url)
-            except Exception:
-                continue
-            if release is not None:
-                releases.append(release)
-
-        if not releases:
-            return None
-
-        # 5. 分类
+        # 6. 分类
         family = ProductFamily.ROUTER
         ptype = _classify_product_type(product_name, entry.default_type)
 
-        # 6. 组装候选树
+        # 7. 组装候选树
         slug = _url_slug(entry.url)
-        revision = HardwareRevisionCandidate(
-            source_key=UNSPECIFIED_REVISION_SOURCE_KEY,
-            raw_revision=None,
-            normalized_revision=UNSPECIFIED_REVISION,
-            revision_explicit=False,
-            source_url=None,
-            releases=tuple(releases),
-        )
-
         return ProductCandidate(
             source_key=f"ruijie:{slug}",
             display_name=product_name,
@@ -316,20 +360,81 @@ class RuijieCnAdapter:
             product_type=ptype,
             source_category=None,
             source_url=entry.url,
-            hardware_revisions=(revision,),
+            hardware_revisions=tuple(revisions),
         )
 
     # ------------------------------------------------------------------
-    # 内部：版本详情 → FirmwareReleaseCandidate
+    # 内部：版本列表 API → 版本详情 → FirmwareReleaseCandidate
     # ------------------------------------------------------------------
+
+    async def _get_releases_for_goods(
+        self, goods_id: str, source_url: str
+    ) -> list[FirmwareReleaseCandidate]:
+        """获取指定 goodsId 的所有固件版本（自动翻页）。"""
+        releases: list[FirmwareReleaseCandidate] = []
+        page = 1
+
+        while True:
+            data = await self._auth_post_json(
+                f"{_BASE}/application/soft/version/goods/new",
+                body={
+                    "productId": goods_id,
+                    "pageIndex": page,
+                    "pageSize": _VERSION_PAGE_SIZE,
+                    "versionAttr": "",
+                    "versionStage": "",
+                    "status": "",
+                    "versionName": "",
+                },
+            )
+
+            if not isinstance(data, dict) or data.get("code") != 200:
+                break
+
+            payload = data.get("data")
+            if not isinstance(payload, dict):
+                break
+
+            records = payload.get("records", [])
+            total = _parse_int(payload.get("total")) or 0
+
+            for record in records:
+                if not isinstance(record, dict):
+                    continue
+                release = await self._build_release(record, source_url)
+                if release is not None:
+                    releases.append(release)
+
+            if page * _VERSION_PAGE_SIZE >= total:
+                break
+            page += 1
+
+        return releases
 
     async def _build_release(
-        self, vid: str, version_name: str, source_url: str
+        self, version_record: dict[str, Any], source_url: str
     ) -> FirmwareReleaseCandidate | None:
-        """调 API 获取版本详情，构建 FirmwareReleaseCandidate。"""
-        detail = await self._auth_get_json(
-            f"{_BASE}/application/soft/version/getDetail/{vid}?loadFile=true"
-        )
+        """从 goods/new API 的版本记录构建 FirmwareReleaseCandidate。
+
+        version_record 来自 POST /application/soft/version/goods/new 的 records 元素。
+        再通过 GET /getDetail/{id} 获取文件列表，通过 GET /getDownUrl/{fileId} 获取下载地址。
+        """
+        vid = version_record.get("id")
+        if not vid:
+            return None
+
+        # 跳过不可下载的版本
+        control_state = version_record.get("controlState", "")
+        if control_state and control_state != "可下载":
+            return None
+
+        # 获取文件列表（旧 getDetail API 仍有效）
+        try:
+            detail = await self._auth_get_json(
+                f"{_BASE}/application/soft/version/getDetail/{vid}?loadFile=true"
+            )
+        except Exception:
+            return None
 
         if not isinstance(detail, dict) or detail.get("code") != 200:
             return None
@@ -342,11 +447,23 @@ class RuijieCnAdapter:
         if not isinstance(file_list, list) or not file_list:
             return None
 
-        # 发布信息
-        title = vd.get("pageTitle", version_name) or version_name
-        publish_date = _parse_date(vd.get("publishDate"))
-        version_stage = vd.get("versionStageStr", "")
+        # 发布信息（优先用版本记录的字段，回退到详情接口字段）
+        title = version_record.get("pageTitle") or vd.get("pageTitle") or ""
+        publish_date = _parse_date(version_record.get("publishDate"))
+        version_stage = version_record.get("versionStageStr") or ""
+        status_str = version_record.get("statusStr") or ""
 
+        # 构建发布说明
+        notes_parts: list[str] = []
+        if version_stage:
+            notes_parts.append(f"版本阶段: {version_stage}")
+        if status_str:
+            notes_parts.append(f"状态: {status_str}")
+        new_feature = version_record.get("newFeature", "")
+        if new_feature and new_feature.strip():
+            notes_parts.append(f"新功能: {new_feature.strip()}")
+
+        # 构建 Artifact
         artifacts: list[FirmwareArtifactCandidate] = []
         for fi in file_list:
             if not isinstance(fi, dict):
@@ -359,18 +476,11 @@ class RuijieCnAdapter:
             filename = fi.get("filename") or None
             size = _parse_int(fi.get("size"))
             md5_raw = fi.get("md5")
-
-            # 解析 MD5（Base64 编码 → hex）
             checksum = _parse_md5_base64(md5_raw)
 
-            # 获取下载地址
-            try:
-                download_url = await self._get_download_url(int(file_id))
-            except Exception:
-                download_url = None
-
-            if download_url is None:
-                continue
+            # 下载地址留占位符，下载时由 refresh_artifact_url 实时解析
+            # （OSS 签名 URL 有效期约 1 小时，采集阶段获取毫无意义）
+            download_url = f"pending:{file_id}"
 
             artifact = FirmwareArtifactCandidate(
                 source_key=f"ruijie:{vid}:{file_id}",
@@ -387,7 +497,7 @@ class RuijieCnAdapter:
         if not artifacts:
             return None
 
-        version_raw = version_name or title
+        version_raw = title
         version_normalized = _normalize_version(version_raw)
 
         return FirmwareReleaseCandidate(
@@ -396,7 +506,7 @@ class RuijieCnAdapter:
             version_normalized=version_normalized,
             release_date=publish_date,
             title=title,
-            release_notes=f"版本阶段: {version_stage}" if version_stage else None,
+            release_notes="; ".join(notes_parts) if notes_parts else None,
             release_notes_url=None,
             source_url=source_url,
             artifacts=tuple(artifacts),
@@ -435,10 +545,13 @@ class RuijieCnAdapter:
 
     async def _auth_get_json(self, url: str) -> Any:
         """带认证的 GET JSON 请求，返回已解析的 dict。"""
-        import json
-
         result = await self._http.get_text(url, headers=self._auth_headers())
         return json.loads(result.text)
+
+    async def _auth_post_json(self, url: str, *, body: dict[str, Any]) -> Any:
+        """带认证的 JSON POST 请求，返回已解析的响应体。"""
+        result = await self._http.post_json(url, body=body, headers=self._auth_headers())
+        return result.data
 
 
 # ---------------------------------------------------------------------------
@@ -466,9 +579,7 @@ def _url_slug(url: str) -> str:
     """
     path = urlsplit(url).path.strip("/")
     parts = path.split("/")
-    # 最后一段就是 slug
     slug = parts[-1]
-    # 去掉可能的前缀 rj-cp-
     if slug.startswith("rj-cp-"):
         slug = slug[6:]
     return slug
@@ -480,20 +591,10 @@ def _extract_model(product_name: str) -> str:
     只匹配 ASCII 字母/数字/连字符，避免 \\w 匹配到中文字符。
     """
     m = re.match(r"(RG-[a-zA-Z0-9_-]+)", product_name)
-    return m.group(1) if m else product_name.split("系列")[0].strip()
-
-
-def _extract_version_name(html: str, pos: int, vid: str) -> str:
-    """从 rowHref 调用位置附近提取版本名称。
-
-    rowHref('VID', '版本名称') — pos 指向 VID 引号之后，
-    后续文本为 `, '版本名称')`，匹配逗号后的第二引号参数。
-    """
-    after = html[pos : pos + 200]
-    m = re.search(r"""\s*,\s*['"]([^'"]+)['"]""", after)
     if m:
         return m.group(1)
-    return vid
+    # 回退：取"系列"之前的部分
+    return product_name.split("系列")[0].strip()
 
 
 def _parse_date(raw: Any) -> date | None:
@@ -543,13 +644,10 @@ def _normalize_version(raw: str) -> str | None:
     """
     if not raw or not raw.strip():
         return None
-    # 尝试直接匹配常见版本模式
     m = re.search(r"(\d+\.\d+[^\s]*)", raw)
     if m:
         v = m.group(1)
-        # 替换括号为点
         v = v.replace("(", ".").replace(")", ".")
-        # 去除末尾多余的点
         v = v.rstrip(".")
         return v.lower()
     return raw.lower()

@@ -80,7 +80,7 @@ def seeded_cli(tmp_path, monkeypatch, make_product_candidate):
         DiscoveryCompleted(is_complete=True, incomplete_reason=None, issues=()),
     ]
 
-    def fake_builder(source_key, http):
+    def fake_builder(source_key, http, data_dir=None):
         return FakeAdapter(list(events))
 
     monkeypatch.setattr(registry, "build_adapter", fake_builder)
@@ -212,7 +212,7 @@ def test_download_release_with_multiple_artifacts_lists_choices(
         DiscoveredProduct(product=product),
         DiscoveryCompleted(is_complete=True, incomplete_reason=None, issues=()),
     ]
-    monkeypatch.setattr(registry, "build_adapter", lambda key, http: FakeAdapter(list(events)))
+    monkeypatch.setattr(registry, "build_adapter", lambda key, http, data_dir=None: FakeAdapter(list(events)))
     result = runner.invoke(cli, ["--data-dir", data, "crawl", "tp-link-cn"])
     assert result.exit_code == 0, result.output
 

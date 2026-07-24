@@ -113,7 +113,7 @@ def test_e2e_cli_full_flow(tmp_path, monkeypatch):
     monkeypatch.setattr(
         registry,
         "build_adapter",
-        lambda key, http: TplinkCnAdapter(FixtureHttpFetcher(fixture_responses())),
+        lambda key, http, data_dir=None: TplinkCnAdapter(FixtureHttpFetcher(fixture_responses())),
     )
     for var in ("all_proxy", "ALL_PROXY", "http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY"):
         monkeypatch.delenv(var, raising=False)

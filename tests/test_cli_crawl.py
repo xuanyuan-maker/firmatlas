@@ -37,7 +37,7 @@ class FakeAdapter:
 
 
 def make_fake_builder(events):
-    def _build(source_key, http):
+    def _build(source_key, http, data_dir=None):
         assert source_key == "tp-link-cn"
         return FakeAdapter(events)
 
@@ -127,7 +127,7 @@ def test_crawl_failed_run_exits_nonzero(tmp_path, monkeypatch):
             raise RuntimeError("API 入口不可达")
             yield  # noqa: B901 —— 使函数成为异步生成器
 
-    monkeypatch.setattr(registry, "build_adapter", lambda key, http: ExplodingAdapter())
+    monkeypatch.setattr(registry, "build_adapter", lambda key, http, data_dir=None: ExplodingAdapter())
 
     result = runner.invoke(cli, ["--data-dir", data, "crawl", "tp-link-cn"])
     assert result.exit_code == 1

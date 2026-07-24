@@ -203,7 +203,7 @@ def crawl_via_cli(runner, data, monkeypatch, products):
 
     events = [DiscoveredProduct(product=p) for p in products]
     events.append(DiscoveryCompleted(is_complete=True, incomplete_reason=None, issues=()))
-    monkeypatch.setattr(registry, "build_adapter", lambda key, http: FakeAdapter(events))
+    monkeypatch.setattr(registry, "build_adapter", lambda key, http, data_dir=None: FakeAdapter(events))
     monkeypatch.delenv("all_proxy", raising=False)
     monkeypatch.delenv("ALL_PROXY", raising=False)
     result = runner.invoke(cli, ["--data-dir", data, "crawl", "tp-link-cn"])
