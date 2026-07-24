@@ -16,12 +16,12 @@ from firmatlas.adapters.dlink_us.adapter import DlinkUsAdapter
 from firmatlas.adapters.draytek_global.adapter import DraytekGlobalAdapter
 from firmatlas.adapters.hikvision_global.adapter import HikvisionGlobalAdapter
 from firmatlas.adapters.miwifi_cn.adapter import MiwifiCnAdapter
-from firmatlas.adapters.tenda_global.adapter import TendaGlobalAdapter
-from firmatlas.adapters.uniview_global.adapter import UniviewGlobalAdapter
 from firmatlas.adapters.omada_global.adapter import OmadaGlobalAdapter
+from firmatlas.adapters.ruijie_cn.adapter import RuijieCnAdapter
+from firmatlas.adapters.tenda_global.adapter import TendaGlobalAdapter
 from firmatlas.adapters.tplink_cn.adapter import TplinkCnAdapter
 from firmatlas.adapters.tplink_us.adapter import TplinkUsAdapter
-from firmatlas.adapters.ruijie_cn.adapter import RuijieCnAdapter
+from firmatlas.adapters.uniview_global.adapter import UniviewGlobalAdapter
 from firmatlas.adapters.zyxel_global.adapter import ZyxelGlobalAdapter
 from firmatlas.app.crawl import SourceAdapter
 from firmatlas.domain.errors import FirmAtlasError
@@ -239,6 +239,8 @@ _ADAPTER_BUILDERS = {
 }
 
 _LEGACY_TLS_SOURCE_KEYS = frozenset({"dlink-us"})
+_DEFAULT_CRAWL_REQUEST_INTERVAL = 0.5
+_CRAWL_REQUEST_INTERVALS = {"ruijie-cn": 0.25}
 
 
 def supported_source_keys() -> list[str]:
@@ -259,7 +261,15 @@ def requires_legacy_tls(source_key: str) -> bool:
     return source_key in _LEGACY_TLS_SOURCE_KEYS
 
 
-def build_adapter(source_key: str, http: HttpFetcher, data_dir: Path | None = None) -> SourceAdapter:
+def crawl_request_interval(source_key: str) -> float:
+    """返回来源在 crawl 阶段的最小请求启动间隔（秒）。"""
+    check_supported(source_key)
+    return _CRAWL_REQUEST_INTERVALS.get(source_key, _DEFAULT_CRAWL_REQUEST_INTERVAL)
+
+
+def build_adapter(
+    source_key: str, http: HttpFetcher, data_dir: Path | None = None
+) -> SourceAdapter:
     check_supported(source_key)
     cls = _ADAPTER_BUILDERS[source_key]
     # ruijie-cn 需要 data_dir 读取/保存认证 token

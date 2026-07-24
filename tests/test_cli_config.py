@@ -137,9 +137,24 @@ retry_backoff_base = 0.25
         "connect_timeout": 7.0,
         "legacy_tls": False,
     }
-    assert captured["fetcher"] == {"max_retries": 2, "retry_backoff_base": 0.25}
+    assert captured["fetcher"] == {
+        "max_retries": 2,
+        "retry_backoff_base": 0.25,
+        "request_interval": 0.5,
+    }
 
     result = runner.invoke(cli, ["--config", str(config_path), "crawl", "dlink-us"])
 
     assert result.exit_code == 0, result.output
     assert captured["client"]["legacy_tls"] is True
+
+    monkeypatch.setenv("RUIJIE_TOKEN", "fixture-token")
+    result = runner.invoke(cli, ["--config", str(config_path), "crawl", "ruijie-cn"])
+
+    assert result.exit_code == 0, result.output
+    assert captured["fetcher"]["request_interval"] == 0.25
+
+
+def test_crawl_request_interval_is_source_specific():
+    assert registry.crawl_request_interval("ruijie-cn") == 0.25
+    assert registry.crawl_request_interval("tp-link-cn") == 0.5

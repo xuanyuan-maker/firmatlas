@@ -168,6 +168,7 @@ def crawl_command(ctx: click.Context, source_key: str) -> None:
                 client,
                 max_retries=config.http.max_retries,
                 retry_backoff_base=config.http.retry_backoff_base,
+                request_interval=registry.crawl_request_interval(source_key),
             )
             adapter = registry.build_adapter(source_key, http, data_dir)
             return await crawl_source(
@@ -779,7 +780,7 @@ def auth_command(
     click.echo(instructions)
     click.echo()
     click.echo("获取到 token 后，通过以下方式之一保存：")
-    click.echo(f"  1. 环境变量: export RUIJIE_TOKEN=\"你的token\"")
+    click.echo("  1. 环境变量: export RUIJIE_TOKEN=\"你的token\"")
     click.echo(f"  2. 文件保存: firmatlas auth {source_key} --save \"你的token\"")
     click.echo(f"  3. 环境变量（临时）: RUIJIE_TOKEN=\"xxx\" firmatlas crawl {source_key}")
     click.echo()
