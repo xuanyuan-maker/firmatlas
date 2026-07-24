@@ -19,6 +19,7 @@ import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -90,10 +91,10 @@ class RuijieCnAdapter:
 
     source_key = "ruijie-cn"
 
-    def __init__(self, http: HttpFetcher) -> None:
+    def __init__(self, http: HttpFetcher, data_dir: Path | None = None) -> None:
         self._http = http
         try:
-            self._token_info = load_token()
+            self._token_info = load_token(data_dir)
         except TokenNotConfiguredError:
             self._token_info = None
 

@@ -153,6 +153,7 @@ def crawl_command(ctx: click.Context, source_key: str) -> None:
     config: AppConfig = ctx.obj["config"]
     try:
         registry.check_supported(source_key)
+        _ensure_auth_before_crawl(source_key, data_dir)
         engine = _open_database_with_recovery(data_dir)
     except FirmAtlasError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -168,7 +169,7 @@ def crawl_command(ctx: click.Context, source_key: str) -> None:
                 max_retries=config.http.max_retries,
                 retry_backoff_base=config.http.retry_backoff_base,
             )
-            adapter = registry.build_adapter(source_key, http)
+            adapter = registry.build_adapter(source_key, http, data_dir)
             return await crawl_source(
                 adapter=adapter, uow_factory=SqliteUnitOfWorkFactory(engine)
             )
@@ -492,7 +493,7 @@ def download_command(ctx: click.Context, artifact_ids: tuple[str, ...]) -> None:
                     )
                 client = clients[legacy_tls]
                 downloader = downloaders[legacy_tls]
-                adapter = _build_refreshing_adapter(source_key, client, config)
+                adapter = _build_refreshing_adapter(source_key, client, config, data_dir)
                 try:
                     report = await download_artifact(
                         artifact_id=artifact_id,
@@ -569,7 +570,7 @@ def _source_key_of(uow_factory, artifact_id: str) -> str:
     return ctx.source.source_key
 
 
-def _build_refreshing_adapter(source_key: str, client, config: AppConfig):
+def _build_refreshing_adapter(source_key: str, client, config: AppConfig, data_dir: Path):
     """来源有适配器且实现了地址刷新时返回适配器，否则返回 None（下载仍可进行）。"""
     try:
         http = HttpFetcher(
@@ -577,7 +578,7 @@ def _build_refreshing_adapter(source_key: str, client, config: AppConfig):
             max_retries=config.http.max_retries,
             retry_backoff_base=config.http.retry_backoff_base,
         )
-        adapter = registry.build_adapter(source_key, http)
+        adapter = registry.build_adapter(source_key, http, data_dir)
     except FirmAtlasError:
         return None
     return adapter if hasattr(adapter, "refresh_artifact_url") else None
@@ -702,6 +703,28 @@ _AUTH_INSTRUCTIONS = {
         "4. 复制输出的 token 值",
     ),
 }
+
+
+def _ensure_auth_before_crawl(source_key: str, data_dir: Path) -> None:
+    """crawl 前确保来源已认证；token 缺失时交互式引导用户输入。"""
+    if source_key not in _AUTH_SOURCE_KEYS:
+        return
+
+    if source_key == "ruijie-cn":
+        from firmatlas.adapters.ruijie_cn.auth import (
+            TokenNotConfiguredError,
+            load_token,
+            prompt_interactive_token,
+            save_token,
+        )
+
+        try:
+            load_token(data_dir)
+        except TokenNotConfiguredError:
+            token = prompt_interactive_token()
+            path = save_token(token, data_dir)
+            click.echo(f"✅ Token 已保存到 {path}")
+            click.echo()
 
 
 @cli.command(name="auth")

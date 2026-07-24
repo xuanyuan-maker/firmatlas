@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from firmatlas.adapters.dahua_global.adapter import DahuaGlobalAdapter
 from firmatlas.adapters.dlink_us.adapter import DlinkUsAdapter
 from firmatlas.adapters.draytek_global.adapter import DraytekGlobalAdapter
@@ -257,6 +259,10 @@ def requires_legacy_tls(source_key: str) -> bool:
     return source_key in _LEGACY_TLS_SOURCE_KEYS
 
 
-def build_adapter(source_key: str, http: HttpFetcher) -> SourceAdapter:
+def build_adapter(source_key: str, http: HttpFetcher, data_dir: Path | None = None) -> SourceAdapter:
     check_supported(source_key)
-    return _ADAPTER_BUILDERS[source_key](http)
+    cls = _ADAPTER_BUILDERS[source_key]
+    # ruijie-cn 需要 data_dir 读取/保存认证 token
+    if source_key == "ruijie-cn":
+        return cls(http, data_dir)
+    return cls(http)

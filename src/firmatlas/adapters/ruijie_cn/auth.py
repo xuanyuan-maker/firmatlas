@@ -64,3 +64,24 @@ def save_token(token: str, data_dir: Path) -> Path:
     token_path = auth_dir / TOKEN_FILENAME
     token_path.write_text(token.strip())
     return token_path
+
+
+def prompt_interactive_token() -> str:
+    """交互式引导用户获取并输入 ruijie-cn token。
+
+    打印获取指引后等待用户粘贴 token，返回去除首尾空白的 token 字符串。
+    用户直接回车（空输入）时抛出 TokenNotConfiguredError。
+    """
+    import click
+
+    click.echo()
+    click.echo("🔐 锐捷中国站需要登录认证。")
+    click.echo("   1. 浏览器打开 https://www.ruijie.com.cn/user/login/ 并微信扫码登录")
+    click.echo("   2. 按 F12 打开开发者工具 → Console 标签")
+    click.echo("   3. 执行: document.cookie.match(/GW_ACCESS_TOKEN=([^;]+)/)[1]")
+    click.echo("   4. 复制输出的 token 值，粘贴到下方")
+    click.echo()
+    token = click.prompt("Token").strip()
+    if not token:
+        raise TokenNotConfiguredError("未输入 token，已取消。")
+    return token
