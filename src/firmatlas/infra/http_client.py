@@ -92,6 +92,7 @@ class HttpFetcher:
         self._retry_backoff_base = retry_backoff_base
         self._request_interval = request_interval
         self._last_request_time: float = 0.0
+        self._throttle_lock = asyncio.Lock()
 
     # -- POST JSON（tp-link-cn search API 的核心调用） ------------------
 
@@ -148,11 +149,13 @@ class HttpFetcher:
         """请求间节流：确保两次请求之间至少有 _request_interval 秒间隔。"""
         if self._request_interval <= 0:
             return
-        now = asyncio.get_event_loop().time()
-        elapsed = now - self._last_request_time
-        if elapsed < self._request_interval:
-            await asyncio.sleep(self._request_interval - elapsed)
-        self._last_request_time = asyncio.get_event_loop().time()
+        async with self._throttle_lock:
+            loop = asyncio.get_running_loop()
+            now = loop.time()
+            elapsed = now - self._last_request_time
+            if elapsed < self._request_interval:
+                await asyncio.sleep(self._request_interval - elapsed)
+            self._last_request_time = loop.time()
 
     async def _retry(
         self,
@@ -195,11 +198,12 @@ class HttpFetcher:
                         try:
                             retry_seconds = int(retry_after)
                         except ValueError:
-                            retry_seconds = self._retry_backoff_base * (2 ** attempt)
+                            retry_seconds = self._retry_backoff_base * (2**attempt)
                     else:
-                        retry_seconds = self._retry_backoff_base * (2 ** attempt)
+                        retry_seconds = self._retry_backoff_base * (2**attempt)
                     last_error = FetchError(
-                        url, 429,
+                        url,
+                        429,
                         f"rate limited: {response.text[:200]}",
                     )
                     # 429 的等待时间叠加在退避基础上
@@ -210,18 +214,20 @@ class HttpFetcher:
                 if 400 <= response.status_code < 500:
                     # 4xx（429 除外）不重试
                     raise FetchError(
-                        url, response.status_code,
+                        url,
+                        response.status_code,
                         f"client error: {response.text[:200]}",
                     )
 
                 # 5xx 可重试
                 last_error = FetchError(
-                    url, response.status_code,
+                    url,
+                    response.status_code,
                     f"server error: {response.text[:200]}",
                 )
 
             if attempt < self._max_retries:
-                delay = self._retry_backoff_base * (2 ** attempt)
+                delay = self._retry_backoff_base * (2**attempt)
                 await asyncio.sleep(delay)
 
         # 重试耗尽

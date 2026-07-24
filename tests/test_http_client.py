@@ -1,5 +1,6 @@
 """HTTP 客户端超时与重试配置测试。"""
 
+import asyncio
 import ssl
 
 import httpx
@@ -82,3 +83,33 @@ async def test_http_fetcher_uses_effective_retry_settings():
 
     assert attempts == 2
     assert result.data == {"ok": True}
+
+
+@pytest.mark.anyio
+async def test_concurrent_requests_are_throttled_but_can_remain_in_flight():
+    request_interval = 0.03
+    request_started_at: list[float] = []
+    in_flight = 0
+    max_in_flight = 0
+
+    async def handler(request):
+        nonlocal in_flight, max_in_flight
+        request_started_at.append(asyncio.get_running_loop().time())
+        in_flight += 1
+        max_in_flight = max(max_in_flight, in_flight)
+        await asyncio.sleep(0.09)
+        in_flight -= 1
+        return httpx.Response(200, json={"ok": True}, request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        fetcher = HttpFetcher(client, max_retries=0, request_interval=request_interval)
+        await asyncio.gather(
+            *(fetcher.get_json(f"https://example.com/{index}") for index in range(4))
+        )
+
+    intervals = [
+        current - previous
+        for previous, current in zip(request_started_at, request_started_at[1:], strict=False)
+    ]
+    assert all(interval >= request_interval * 0.8 for interval in intervals)
+    assert max_in_flight > 1
