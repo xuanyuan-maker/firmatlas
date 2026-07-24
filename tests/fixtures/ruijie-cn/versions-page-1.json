@@ -1,0 +1,40 @@
+{
+  "code": 200,
+  "data": {
+    "records": [
+      {
+        "id": 501,
+        "pageTitle": "RGOS 1.0.1",
+        "publishDate": "2026-01-01",
+        "controlState": "可下载",
+        "versionStageStr": "正式版",
+        "statusStr": "已发布"
+      },
+      {
+        "id": 502,
+        "pageTitle": "RGOS 1.0.2",
+        "publishDate": "2026-02-01",
+        "controlState": "可下载",
+        "versionStageStr": "正式版",
+        "statusStr": "已发布"
+      },
+      {
+        "id": 503,
+        "pageTitle": "RGOS 1.0.3",
+        "publishDate": "2026-03-01",
+        "controlState": "可下载",
+        "versionStageStr": "正式版",
+        "statusStr": "已发布"
+      },
+      {
+        "id": 504,
+        "pageTitle": "RGOS 1.0.4",
+        "publishDate": "2026-04-01",
+        "controlState": "可下载",
+        "versionStageStr": "正式版",
+        "statusStr": "已发布"
+      }
+    ],
+    "total": 51
+  }
+}

@@ -4,8 +4,8 @@
 
 数据流：
   分类页 HTML → 提取产品 URL 列表 → 逐个产品页提取 goodsId
-  → 调版本列表 API (POST /goods/new) → 调版本详情 API (/getDetail/{id})
-  → 调下载地址 API (/getDownUrl/{fileId}) → 构建 ProductCandidate 树 → yield DiscoveredProduct
+  → 调版本列表 API (POST /goods/new) → 并发调版本详情 API (/getDetail/{id})
+  → 构建 ProductCandidate 树 → yield DiscoveredProduct
 
 认证要求：需要 GW_ACCESS_TOKEN（浏览器登录后获取，约 8 小时有效）。
 
@@ -15,11 +15,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -55,10 +56,10 @@ _BASE = "https://www.ruijie.com.cn"
 
 # 目标分类页及其默认产品类型
 _CATEGORY_PAGES: list[tuple[str, ProductType]] = [
-    ("/fw/rj-first-2321/", ProductType.ROUTER),         # 路由器
-    ("/fw/rj-first-2320/", ProductType.WIRELESS_AP),     # 无线
-    ("/fw/rj-first-2742/", ProductType.ROUTER),          # 家用路由器
-    ("/fw/rj-first-2348/", ProductType.ROUTER),          # 网关
+    ("/fw/rj-first-2321/", ProductType.ROUTER),  # 路由器
+    ("/fw/rj-first-2320/", ProductType.WIRELESS_AP),  # 无线
+    ("/fw/rj-first-2742/", ProductType.ROUTER),  # 家用路由器
+    ("/fw/rj-first-2348/", ProductType.ROUTER),  # 网关
 ]
 
 # 从分类页提取产品 URL 的正则
@@ -75,16 +76,27 @@ _GOODS_ITEM_RE = re.compile(
 # 版本 API 每页条数
 _VERSION_PAGE_SIZE = 50
 
+# 同一版本列表页内同时获取详情的最大任务数
+_DETAIL_MAX_CONCURRENCY = 4
+
 # 移动路由器关键词（覆盖为 cellular_cpe）
 _MOBILE_ROUTER_KW = ("移动", "5g", "4g", "3g", "nr", "lte")
 
 # 非固件产品页面的 URL 特征（解决方案/软件/实验室等）
-_NON_FIRMWARE_SLUGS = frozenset({
-    "sdwan", "srv6-solution", "5g-solution", "lyiowan",  # 解决方案
-    "bros", "rg-rcms", "racc", "rcms",                    # 应用软件
-    "lbsys1",                                              # 实验室
-    "3g",                                                  # 过时的 3G 分类页
-})
+_NON_FIRMWARE_SLUGS = frozenset(
+    {
+        "sdwan",
+        "srv6-solution",
+        "5g-solution",
+        "lyiowan",  # 解决方案
+        "bros",
+        "rg-rcms",
+        "racc",
+        "rcms",  # 应用软件
+        "lbsys1",  # 实验室
+        "3g",  # 过时的 3G 分类页
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -117,8 +129,7 @@ class RuijieCnAdapter:
             yield DiscoveryCompleted(
                 is_complete=False,
                 incomplete_reason=(
-                    "未配置锐捷登录 token。"
-                    "请执行 firmatlas auth ruijie-cn 查看获取指引。"
+                    "未配置锐捷登录 token。请执行 firmatlas auth ruijie-cn 查看获取指引。"
                 ),
                 issues=(),
             )
@@ -171,9 +182,7 @@ class RuijieCnAdapter:
     # refresh_artifact_url()
     # ------------------------------------------------------------------
 
-    async def refresh_artifact_url(
-        self, request: ArtifactRefreshRequest
-    ) -> ArtifactRefreshResult:
+    async def refresh_artifact_url(self, request: ArtifactRefreshRequest) -> ArtifactRefreshResult:
         """获取/刷新 OSS 临时下载链接。
 
         两种调用路径：
@@ -224,7 +233,7 @@ class RuijieCnAdapter:
 
         return ArtifactUrlRefreshed(
             download_url=url,
-            url_expires_at=datetime.now(timezone.utc).replace(
+            url_expires_at=datetime.now(UTC).replace(
                 hour=0, minute=0, second=0, microsecond=0
             ),  # OSS URL 有效期约 1 小时，标记为当天过期
         )
@@ -260,9 +269,7 @@ class RuijieCnAdapter:
                     continue
 
                 seen.add(path)
-                entries.append(
-                    _ProductEntry(url=f"{_BASE}{path}", default_type=default_type)
-                )
+                entries.append(_ProductEntry(url=f"{_BASE}{path}", default_type=default_type))
 
         if not entries:
             return None  # 表示完全无法访问
@@ -398,12 +405,7 @@ class RuijieCnAdapter:
             records = payload.get("records", [])
             total = _parse_int(payload.get("total")) or 0
 
-            for record in records:
-                if not isinstance(record, dict):
-                    continue
-                release = await self._build_release(record, source_url)
-                if release is not None:
-                    releases.append(release)
+            releases.extend(await self._build_releases(records, source_url))
 
             if page * _VERSION_PAGE_SIZE >= total:
                 break
@@ -411,13 +413,33 @@ class RuijieCnAdapter:
 
         return releases
 
+    async def _build_releases(
+        self, records: Any, source_url: str
+    ) -> list[FirmwareReleaseCandidate]:
+        """有界并发构建一页版本详情，并保持版本列表的原始顺序。"""
+        if not isinstance(records, list):
+            return []
+
+        semaphore = asyncio.Semaphore(_DETAIL_MAX_CONCURRENCY)
+
+        async def build(record: dict[str, Any]) -> FirmwareReleaseCandidate | None:
+            async with semaphore:
+                return await self._build_release(record, source_url)
+
+        tasks = [build(record) for record in records if isinstance(record, dict)]
+        if not tasks:
+            return []
+
+        results = await asyncio.gather(*tasks)
+        return [release for release in results if release is not None]
+
     async def _build_release(
         self, version_record: dict[str, Any], source_url: str
     ) -> FirmwareReleaseCandidate | None:
         """从 goods/new API 的版本记录构建 FirmwareReleaseCandidate。
 
         version_record 来自 POST /application/soft/version/goods/new 的 records 元素。
-        再通过 GET /getDetail/{id} 获取文件列表，通过 GET /getDownUrl/{fileId} 获取下载地址。
+        再通过 GET /getDetail/{id} 获取文件列表；下载地址在实际下载前按需解析。
         """
         vid = version_record.get("id")
         if not vid:
@@ -518,9 +540,7 @@ class RuijieCnAdapter:
 
     async def _get_download_url(self, file_id: int) -> str | None:
         """调 API 获取 OSS 临时下载地址。"""
-        data = await self._auth_get_json(
-            f"{_BASE}/application/soft/version/getDownUrl/{file_id}"
-        )
+        data = await self._auth_get_json(f"{_BASE}/application/soft/version/getDownUrl/{file_id}")
         if isinstance(data, dict) and data.get("code") == 200:
             url = data.get("data")
             if isinstance(url, str) and url:

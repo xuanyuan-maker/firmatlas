@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
+import json
+from pathlib import Path
 
+import pytest
+
+from firmatlas.adapters.events import DiscoveredProduct, DiscoveryCompleted
 from firmatlas.adapters.ruijie_cn.adapter import (
+    _DETAIL_MAX_CONCURRENCY,
     _GOODS_ITEM_RE,
     _GOODS_SPAN_RE,
     _PRODUCT_LINK_RE,
+    RuijieCnAdapter,
     _classify_product_type,
     _extract_model,
     _normalize_version,
@@ -16,6 +24,9 @@ from firmatlas.adapters.ruijie_cn.adapter import (
     _url_slug,
 )
 from firmatlas.domain.model import ProductType
+from firmatlas.infra.http_client import FetchedJson, FetchedText
+
+FIXTURE = Path(__file__).parent / "fixtures" / "ruijie-cn"
 
 
 class TestUrlSlug:
@@ -138,7 +149,10 @@ class TestGoodsSpanRegex:
     """新版产品页 <span goodsId="..."> 提取。"""
 
     def test_extract_product_line_goods_id(self) -> None:
-        html = '<span data-id="abc-123" goodsId="1777604717224923138">RG-EG-E系列新一代智能安全网关</span>'
+        html = (
+            '<span data-id="abc-123" goodsId="1777604717224923138">'
+            "RG-EG-E系列新一代智能安全网关</span>"
+        )
         match = _GOODS_SPAN_RE.search(html)
         assert match is not None
         assert match.group(1) == "1777604717224923138"
@@ -160,7 +174,10 @@ class TestGoodsItemRegex:
     """新版产品页 <div class="item" goodsId="..."> 提取。"""
 
     def test_extract_single_model(self) -> None:
-        html = '<div class="item" style="cursor:pointer;" goodsId="2048582900152905729"> RG-EG-E3100-P </div>'
+        html = (
+            '<div class="item" style="cursor:pointer;" goodsId="2048582900152905729">'
+            " RG-EG-E3100-P </div>"
+        )
         matches = _GOODS_ITEM_RE.findall(html)
         assert len(matches) == 1
         assert matches[0] == ("2048582900152905729", "RG-EG-E3100-P")
@@ -188,3 +205,119 @@ class TestGoodsItemRegex:
         html = '<div class="other" goodsId="123">Not an item</div>'
         matches = _GOODS_ITEM_RE.findall(html)
         assert len(matches) == 0
+
+
+class _FixtureHttpFetcher:
+    def __init__(
+        self,
+        *,
+        detail_delay: float = 0,
+        failed_detail_ids: frozenset[int] = frozenset(),
+    ) -> None:
+        self.detail_delay = detail_delay
+        self.failed_detail_ids = failed_detail_ids
+        self.version_pages_requested: list[int] = []
+        self.detail_in_flight = 0
+        self.max_detail_in_flight = 0
+
+    async def get_text(self, url: str, *, headers=None) -> FetchedText:
+        if "/fw/rj-first-" in url:
+            return _fetched_text(url, "category.html")
+        if url.endswith("/fw/rj-cp-rg-eg/"):
+            return _fetched_text(url, "product.html")
+        if "/application/soft/version/getDetail/" in url:
+            detail_id = int(url.split("/getDetail/", 1)[1].split("?", 1)[0])
+            self.detail_in_flight += 1
+            self.max_detail_in_flight = max(self.max_detail_in_flight, self.detail_in_flight)
+            try:
+                if self.detail_delay:
+                    await asyncio.sleep(self.detail_delay)
+                if detail_id in self.failed_detail_ids:
+                    raise ConnectionError(f"simulated detail failure: {detail_id}")
+                return _fetched_text(url, f"detail-{detail_id}.json")
+            finally:
+                self.detail_in_flight -= 1
+        raise AssertionError(f"unexpected GET: {url}")
+
+    async def post_json(self, url: str, body, *, headers=None) -> FetchedJson:
+        assert url.endswith("/application/soft/version/goods/new")
+        assert body["productId"] == "100"
+        page = body["pageIndex"]
+        self.version_pages_requested.append(page)
+        data = json.loads((FIXTURE / f"versions-page-{page}.json").read_text())
+        return FetchedJson(url=url, status_code=200, data=data)
+
+
+def _fetched_text(url: str, fixture_name: str) -> FetchedText:
+    return FetchedText(
+        url=url,
+        status_code=200,
+        text=(FIXTURE / fixture_name).read_text(encoding="utf-8"),
+    )
+
+
+async def _discover(fetcher: _FixtureHttpFetcher):
+    return [event async for event in RuijieCnAdapter(fetcher).discover()]
+
+
+@pytest.mark.anyio
+async def test_discover_fetches_details_with_bounded_concurrency_and_preserves_order(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("RUIJIE_TOKEN", "fixture-token")
+    fetcher = _FixtureHttpFetcher(detail_delay=0.03)
+
+    events = await _discover(fetcher)
+
+    assert fetcher.version_pages_requested == [1, 2]
+    assert fetcher.max_detail_in_flight == _DETAIL_MAX_CONCURRENCY
+    assert isinstance(events[-1], DiscoveryCompleted)
+    assert events[-1].is_complete is True
+
+    product_event = next(event for event in events if isinstance(event, DiscoveredProduct))
+    releases = product_event.product.hardware_revisions[0].releases
+    assert [release.source_key for release in releases] == [
+        "ruijie:501",
+        "ruijie:502",
+        "ruijie:503",
+        "ruijie:504",
+        "ruijie:505",
+    ]
+    assert [release.artifacts[0].download_url for release in releases] == [
+        "pending:9501",
+        "pending:9502",
+        "pending:9503",
+        "pending:9504",
+        "pending:9505",
+    ]
+
+
+@pytest.mark.anyio
+async def test_detail_failure_does_not_abort_other_releases(monkeypatch) -> None:
+    monkeypatch.setenv("RUIJIE_TOKEN", "fixture-token")
+    fetcher = _FixtureHttpFetcher(failed_detail_ids=frozenset({503}))
+
+    events = await _discover(fetcher)
+
+    product_event = next(event for event in events if isinstance(event, DiscoveredProduct))
+    releases = product_event.product.hardware_revisions[0].releases
+    assert [release.source_key for release in releases] == [
+        "ruijie:501",
+        "ruijie:502",
+        "ruijie:504",
+        "ruijie:505",
+    ]
+    assert isinstance(events[-1], DiscoveryCompleted)
+
+
+@pytest.mark.anyio
+async def test_source_key_contract_is_stable(monkeypatch) -> None:
+    monkeypatch.setenv("RUIJIE_TOKEN", "fixture-token")
+
+    first = await _discover(_FixtureHttpFetcher())
+    second = await _discover(_FixtureHttpFetcher())
+
+    first_product = next(event.product for event in first if isinstance(event, DiscoveredProduct))
+    second_product = next(event.product for event in second if isinstance(event, DiscoveredProduct))
+    assert first_product == second_product
+    assert first_product.source_key == "ruijie:rg-eg"

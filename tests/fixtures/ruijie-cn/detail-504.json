@@ -1,0 +1,14 @@
+{
+  "code": 200,
+  "data": {
+    "pageTitle": "RGOS 1.0.4",
+    "softFileList": [
+      {
+        "id": 9504,
+        "filename": "rg-eg-1.0.4.bin",
+        "size": "4096",
+        "md5": null
+      }
+    ]
+  }
+}

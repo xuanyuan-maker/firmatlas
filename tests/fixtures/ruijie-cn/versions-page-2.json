@@ -1,0 +1,16 @@
+{
+  "code": 200,
+  "data": {
+    "records": [
+      {
+        "id": 505,
+        "pageTitle": "RGOS 1.0.5",
+        "publishDate": "2026-05-01",
+        "controlState": "可下载",
+        "versionStageStr": "正式版",
+        "statusStr": "已发布"
+      }
+    ],
+    "total": 51
+  }
+}
