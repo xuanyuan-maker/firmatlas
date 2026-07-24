@@ -63,8 +63,14 @@ MVP 的全部 32 项验收标准已经通过。
 > **Ruijie 适配器已知限制**：`ruijie-cn` 需要锐捷官网登录后的 `GW_ACCESS_TOKEN`
 > Cookie 才能调用固件详情与下载地址 API。Token 有效期约 8 小时，过期需重新获取。
 > 执行 `firmatlas crawl ruijie-cn` 时若未配置 token，CLI 会交互式引导输入；也可通过
-> 环境变量 `RUIJIE_TOKEN` 或 `firmatlas auth ruijie-cn --save` 提前配置。
-> 适配器采集锐捷官网固件下载中心的 4 个路由器/无线/网关分类页，不涉及摄像头产品。
+> 环境变量 `RUIJIE_TOKEN` 或 `firmatlas auth ruijie-cn --save "<token>"` 提前配置。
+> 适配器采集锐捷官网固件下载中心的 4 个路由器/无线/网关分类页，不涉及摄像头产品；
+> 版本详情采用最多 4 路并发，来源级请求启动间隔为 0.25 秒。下载地址是短期有效的 OSS
+> 签名 URL，因此 crawl 阶段只保存 `pending:{file_id}` 占位符，用户执行 download 时才
+> 实时解析。
+>
+> 2026-07-24 的一次完整写库实测覆盖 310 个产品入口，产出 264 个产品、1,304 个发布和
+> 1,679 个 Artifact，耗时约 9 分 3 秒。实际耗时会随厂商站点响应、网络和产品数量变化。
 
 ## 环境要求
 
@@ -84,6 +90,16 @@ uv sync --dev
 
 ```bash
 uv run firmatlas --data-dir data init
+```
+
+锐捷来源需要先保存登录 token。直接把 token 写在命令行中可能进入 shell 历史；在 zsh
+中可以隐藏输入并在保存后立即清除临时变量：
+
+```zsh
+read -rs "RUIJIE_TOKEN_INPUT?请输入锐捷 token: "; echo
+uv run firmatlas --data-dir data auth ruijie-cn --save "$RUIJIE_TOKEN_INPUT"
+unset RUIJIE_TOKEN_INPUT
+uv run firmatlas --data-dir data auth ruijie-cn --check
 ```
 
 查看来源并采集元数据：
@@ -108,8 +124,12 @@ uv run firmatlas --data-dir data crawl ruijie-cn
 
 ```bash
 env -u all_proxy -u http_proxy -u https_proxy \
+  -u ALL_PROXY -u HTTP_PROXY -u HTTPS_PROXY \
   uv run firmatlas --data-dir data crawl hikvision-global
 ```
+
+这也适用于代理变量指向已经停止的本地代理服务时；例如将命令末尾来源替换为
+`ruijie-cn`。取消代理只影响当前命令，不修改终端或系统的全局代理配置。
 
 浏览和筛选固件目录：
 
@@ -139,6 +159,9 @@ Artifact ID；两者都可以使用无歧义的 ID 前缀：
 uv run firmatlas --data-dir data download <release-id-or-artifact-id>
 uv run firmatlas --data-dir data downloads
 ```
+
+锐捷 Artifact 在 crawl 后可能显示 `pending:{file_id}`，这是预期状态。download 用例会先
+获取当前有效的临时地址，再流式下载、比较官方 MD5（若提供）、计算 SHA-256 并原子归档。
 
 所有全局选项必须放在子命令之前。使用以下命令查看完整帮助：
 
@@ -171,7 +194,8 @@ data/firmware/厂商/地区/型号/硬件版本/固件版本/
 uv run firmatlas --config firmatlas.toml --data-dir data config
 ```
 
-超时、重试次数、请求并发和下载并发均有有限默认值，不能配置为无限值。
+配置文件可调整 HTTP 请求/连接超时、重试次数、退避基数和下载超时。请求间隔及并发上限
+由来源策略和实现控制，不提供无限并发配置。
 
 ## 项目结构
 
