@@ -687,5 +687,119 @@ def _echo_table(headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> None:
         click.echo("  ".join(pad(c, w) for c, w in zip(row, widths, strict=True)).rstrip())
 
 
+# ---------------------------------------------------------------------------
+# auth 命令：管理需要登录的来源的认证 token
+# ---------------------------------------------------------------------------
+
+_AUTH_SOURCE_KEYS = frozenset({"ruijie-cn"})
+
+_AUTH_INSTRUCTIONS = {
+    "ruijie-cn": (
+        "锐捷官网 (ruijie.com.cn)",
+        "1. 浏览器打开 https://www.ruijie.com.cn/user/login/ 并登录\n"
+        "2. F12 打开开发者工具 → Console\n"
+        "3. 执行: document.cookie.match(/GW_ACCESS_TOKEN=([^;]+)/)[1]\n"
+        "4. 复制输出的 token 值",
+    ),
+}
+
+
+@cli.command(name="auth")
+@click.argument("source_key")
+@click.option("--check", "check_only", is_flag=True, default=False, help="检查 token 是否有效。")
+@click.option("--save", "save_value", default=None, help="保存 token 值。")
+@click.pass_context
+def auth_command(
+    ctx: click.Context, source_key: str, check_only: bool, save_value: str | None
+) -> None:
+    """管理需要登录的来源的认证 token（如 ruijie-cn）。"""
+    data_dir = Path(ctx.obj["data_dir"])
+
+    if source_key not in _AUTH_SOURCE_KEYS:
+        raise click.ClickException(
+            f"来源 {source_key!r} 不需要 token 认证。"
+            f"需要认证的来源：{', '.join(sorted(_AUTH_SOURCE_KEYS))}"
+        )
+
+    from firmatlas.adapters.ruijie_cn.auth import (
+        TokenNotConfiguredError,
+        load_token,
+        save_token,
+    )
+
+    # --save 模式
+    if save_value is not None:
+        path = save_token(save_value, data_dir)
+        click.echo(f"✅ Token 已保存到 {path}")
+        return
+
+    # --check 模式
+    if check_only:
+        try:
+            token_info = load_token(data_dir)
+        except TokenNotConfiguredError as exc:
+            raise click.ClickException(str(exc)) from exc
+
+        click.echo("正在检查 token 有效性...")
+        valid, detail = asyncio.run(_check_ruijie_token(token_info.token))
+        if valid:
+            click.echo(f"✅ Token 有效（{detail}）")
+        else:
+            click.echo(f"❌ Token 无效或已过期（{detail}）", err=True)
+            raise SystemExit(1)
+        return
+
+    # 默认：显示指引
+    name, instructions = _AUTH_INSTRUCTIONS[source_key]
+    click.echo(f"━━━ {name} Token 获取指引 ━━━")
+    click.echo()
+    click.echo(instructions)
+    click.echo()
+    click.echo("获取到 token 后，通过以下方式之一保存：")
+    click.echo(f"  1. 环境变量: export RUIJIE_TOKEN=\"你的token\"")
+    click.echo(f"  2. 文件保存: firmatlas auth {source_key} --save \"你的token\"")
+    click.echo(f"  3. 环境变量（临时）: RUIJIE_TOKEN=\"xxx\" firmatlas crawl {source_key}")
+    click.echo()
+    click.echo(f"检查 token 是否有效: firmatlas auth {source_key} --check")
+
+
+async def _check_ruijie_token(token: str) -> tuple[bool, str]:
+    """通过锐捷 API 验证 token 是否有效。"""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as client:
+            resp = await client.get(
+                "https://www.ruijie.com.cn/application/plf/softUser/getRoleName",
+                headers={
+                    "Cookie": f"GW_ACCESS_TOKEN={token}; xp-Admin-Token={token}",
+                    "X-Requested-With": "XMLHttpRequest",
+                    "User-Agent": (
+                        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+                        " (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+                    ),
+                },
+            )
+            try:
+                data = resp.json()
+            except Exception:
+                # 响应不是 JSON（可能是登录页或错误页）
+                if resp.status_code in (401, 403):
+                    return False, "token 已过期或无效"
+                return False, f"服务器返回非 JSON 响应 (HTTP {resp.status_code})"
+
+            if isinstance(data, dict) and data.get("code") == 200:
+                role_data = data.get("data")
+                if role_data is None:
+                    # code=200 但 data 为 null → token 无效或已过期
+                    return False, "token 无效或已过期（服务器返回空会话）"
+                role = role_data.get("roleName", "未知") if isinstance(role_data, dict) else "未知"
+                return True, f"角色: {role}"
+            msg = data.get("message", "") if isinstance(data, dict) else ""
+            return False, msg or f"HTTP {resp.status_code}"
+    except Exception as exc:
+        return False, str(exc)
+
+
 def main() -> None:
     cli(prog_name="firmatlas")

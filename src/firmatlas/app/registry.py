@@ -19,6 +19,7 @@ from firmatlas.adapters.uniview_global.adapter import UniviewGlobalAdapter
 from firmatlas.adapters.omada_global.adapter import OmadaGlobalAdapter
 from firmatlas.adapters.tplink_cn.adapter import TplinkCnAdapter
 from firmatlas.adapters.tplink_us.adapter import TplinkUsAdapter
+from firmatlas.adapters.ruijie_cn.adapter import RuijieCnAdapter
 from firmatlas.adapters.zyxel_global.adapter import ZyxelGlobalAdapter
 from firmatlas.app.crawl import SourceAdapter
 from firmatlas.domain.errors import FirmAtlasError
@@ -201,6 +202,21 @@ def seed_sources() -> list[FirmwareSource]:
             created_at=now,
             updated_at=now,
         ),
+        FirmwareSource(
+            id=new_id(),
+            vendor_key="ruijie",
+            vendor_name="Ruijie",
+            source_key="ruijie-cn",
+            name="锐捷中国站固件下载中心",
+            region_code="CN",
+            locale="zh-CN",
+            base_url="https://www.ruijie.com.cn/fw/rj/",
+            adapter_key="ruijie_cn",
+            discovery_method=DiscoveryMethod.HYBRID,
+            enabled=True,
+            created_at=now,
+            updated_at=now,
+        ),
     ]
 
 
@@ -216,6 +232,7 @@ _ADAPTER_BUILDERS = {
     "tenda-global": TendaGlobalAdapter,
     "tp-link-us": TplinkUsAdapter,
     "uniview-global": UniviewGlobalAdapter,
+    "ruijie-cn": RuijieCnAdapter,
     "zyxel-global": ZyxelGlobalAdapter,
 }
 
