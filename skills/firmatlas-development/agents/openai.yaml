@@ -1,4 +1,0 @@
-interface:
-  display_name: "FirmAtlas Development"
-  short_description: "Develop and validate FirmAtlas adapters safely"
-  default_prompt: "Use $firmatlas-development to implement and validate a FirmAtlas adapter change."

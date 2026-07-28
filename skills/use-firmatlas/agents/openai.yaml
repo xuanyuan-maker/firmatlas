@@ -1,0 +1,4 @@
+interface:
+  display_name: "Use FirmAtlas"
+  short_description: "Find and download IoT firmware with FirmAtlas"
+  default_prompt: "Use $use-firmatlas to search FirmAtlas for firmware matching my device."
