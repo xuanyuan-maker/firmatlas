@@ -4,14 +4,22 @@ from pathlib import Path
 
 import pytest
 
+import firmatlas.app.config as config_module
 from firmatlas.app.config import load_config
 from firmatlas.domain.errors import ConfigError
 
 
-def test_load_config_uses_defaults_without_file():
+def test_load_config_uses_linux_platform_defaults_without_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(config_module.sys, "platform", "linux")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    monkeypatch.delenv("FIRMATLAS_CONFIG", raising=False)
+    monkeypatch.delenv("FIRMATLAS_DATA_DIR", raising=False)
+
     config = load_config()
 
-    assert config.data_dir == Path("data")
+    assert config.data_dir == tmp_path / "home" / ".local" / "share" / "firmatlas"
     assert config.verbose is False
     assert config.no_color is False
     assert config.http.request_timeout == 30.0
@@ -21,6 +29,96 @@ def test_load_config_uses_defaults_without_file():
     assert config.download.read_timeout == 60.0
     assert config.download.connect_timeout == 10.0
     assert config.config_path is None
+
+
+def test_load_config_uses_xdg_platform_paths(tmp_path, monkeypatch):
+    monkeypatch.setattr(config_module.sys, "platform", "linux")
+    config_home = tmp_path / "config-home"
+    data_home = tmp_path / "data-home"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
+    monkeypatch.setenv("XDG_DATA_HOME", str(data_home))
+    monkeypatch.delenv("FIRMATLAS_CONFIG", raising=False)
+    monkeypatch.delenv("FIRMATLAS_DATA_DIR", raising=False)
+
+    default_config = config_home / "firmatlas" / "config.toml"
+    default_config.parent.mkdir(parents=True)
+    default_config.write_text('data_dir = "from-default-file"', encoding="utf-8")
+
+    config = load_config()
+
+    assert config.config_path == default_config
+    assert config.data_dir == Path("from-default-file")
+
+
+def test_load_config_uses_macos_platform_paths(tmp_path, monkeypatch):
+    monkeypatch.setattr(config_module.sys, "platform", "darwin")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("FIRMATLAS_CONFIG", raising=False)
+    monkeypatch.delenv("FIRMATLAS_DATA_DIR", raising=False)
+
+    config = load_config()
+
+    app_support = tmp_path / "home" / "Library" / "Application Support" / "FirmAtlas"
+    assert config.config_path is None
+    assert config.data_dir == app_support / "data"
+
+
+def test_load_config_prioritizes_cli_over_environment_over_toml(tmp_path, monkeypatch):
+    toml_data_dir = tmp_path / "from-toml"
+    environment_data_dir = tmp_path / "from-environment"
+    cli_data_dir = tmp_path / "from-cli"
+    config_path = tmp_path / "firmatlas.toml"
+    config_path.write_text(f'data_dir = "{toml_data_dir}"', encoding="utf-8")
+    monkeypatch.setenv("FIRMATLAS_CONFIG", str(config_path))
+    monkeypatch.setenv("FIRMATLAS_DATA_DIR", str(environment_data_dir))
+
+    environment_config = load_config()
+    cli_config = load_config(data_dir=cli_data_dir)
+
+    assert environment_config.data_dir == environment_data_dir
+    assert cli_config.data_dir == cli_data_dir
+
+
+def test_load_config_uses_environment_config_path(tmp_path, monkeypatch):
+    config_path = tmp_path / "from-environment.toml"
+    config_path.write_text("verbose = true", encoding="utf-8")
+    monkeypatch.setenv("FIRMATLAS_CONFIG", str(config_path))
+
+    config = load_config()
+
+    assert config.config_path == config_path
+    assert config.verbose is True
+
+
+@pytest.mark.parametrize("environment_name", ["FIRMATLAS_CONFIG", "FIRMATLAS_DATA_DIR"])
+def test_load_config_rejects_empty_path_environment(environment_name, monkeypatch):
+    monkeypatch.setenv(environment_name, " ")
+
+    with pytest.raises(ConfigError, match="非空路径"):
+        load_config()
+
+
+def test_load_config_ignores_missing_default_config(tmp_path, monkeypatch):
+    monkeypatch.setattr(config_module.sys, "platform", "linux")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "missing-config-home"))
+    monkeypatch.delenv("FIRMATLAS_CONFIG", raising=False)
+    monkeypatch.delenv("FIRMATLAS_DATA_DIR", raising=False)
+
+    config = load_config()
+
+    assert config.config_path is None
+
+
+@pytest.mark.parametrize("config_source", ["cli", "environment"])
+def test_load_config_reports_missing_explicit_config(tmp_path, monkeypatch, config_source):
+    missing = tmp_path / "missing.toml"
+    if config_source == "environment":
+        monkeypatch.setenv("FIRMATLAS_CONFIG", str(missing))
+        with pytest.raises(ConfigError, match="不存在"):
+            load_config()
+    else:
+        with pytest.raises(ConfigError, match="不存在"):
+            load_config(config_path=missing)
 
 
 def test_load_config_merges_toml_then_cli_overrides(tmp_path):
