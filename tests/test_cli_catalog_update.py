@@ -17,7 +17,7 @@ def make_manifest() -> CatalogManifest:
         catalog_version="2026.08.07.1",
         created_at=datetime(2026, 8, 7, tzinfo=UTC),
         schema_version=1,
-        minimum_firmatlas_version="1.0.0",
+        minimum_firmatlas_version="0.1.0",
         database=CatalogDatabase(
             url="firmatlas.db.gz",
             compression="gzip",
@@ -99,6 +99,37 @@ manifest_url = "{(tmp_path / "missing-manifest.json").as_uri()}"
     payload = json.loads(result.stdout)
     assert payload["schema_version"] == 1
     assert payload["error_code"] == "catalog_source_error"
+    assert result.stderr == ""
+
+
+def test_catalog_update_check_replace_json_rejects_invalid_arguments(tmp_path):
+    config_path = tmp_path / "managed.toml"
+    config_path.write_text(
+        f"""
+data_dir = "{tmp_path / "data"}"
+[catalog]
+mode = "managed"
+manifest_url = "{(tmp_path / "manifest.json").as_uri()}"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--config",
+            str(config_path),
+            "catalog",
+            "update",
+            "--check",
+            "--replace",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["error_code"] == "invalid_arguments"
     assert result.stderr == ""
 
 

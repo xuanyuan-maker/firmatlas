@@ -29,7 +29,7 @@ def make_manifest(*, version="2026.08.07.1", lineage="11111111-1111-4111-8111-11
         catalog_version=version,
         created_at=datetime(2026, 8, 7, tzinfo=UTC),
         schema_version=1,
-        minimum_firmatlas_version="1.0.0",
+        minimum_firmatlas_version="0.1.0",
         database=CatalogDatabase(
             url="firmatlas.db.gz",
             compression="gzip",
@@ -75,6 +75,38 @@ def test_check_reports_no_update_for_same_version(tmp_path, monkeypatch):
 
     assert report.update_available is False
     assert report.replace_required is False
+
+
+def test_check_uses_numeric_catalog_version_order(tmp_path, monkeypatch):
+    remote = make_manifest(version="2026.10")
+    local = make_manifest(version="2026.9")
+    (tmp_path / "catalog-manifest.json").write_text(local.to_json(), encoding="utf-8")
+    monkeypatch.setattr(
+        "firmatlas.app.catalog_update.fetch_manifest", lambda *args, **kwargs: remote
+    )
+    config = AppConfig(
+        data_dir=tmp_path,
+        catalog=CatalogConfig(mode="managed", manifest_url="file:///manifest.json"),
+    )
+
+    report = check_catalog_update(data_dir=tmp_path, config=config)
+
+    assert report.update_available is True
+
+
+def test_update_rejects_catalog_requiring_newer_firmatlas(tmp_path, monkeypatch):
+    remote = make_manifest()
+    remote = replace(remote, minimum_firmatlas_version="999.0.0")
+    monkeypatch.setattr(
+        "firmatlas.app.catalog_update.fetch_manifest", lambda *args, **kwargs: remote
+    )
+    config = AppConfig(
+        data_dir=tmp_path,
+        catalog=CatalogConfig(mode="managed", manifest_url="file:///manifest.json"),
+    )
+
+    with pytest.raises(CatalogUpdateError, match="最低版本"):
+        update_catalog(data_dir=tmp_path, config=config, replace=True)
 
 
 def test_update_returns_up_to_date_without_replacing_database(tmp_path, monkeypatch):
@@ -186,6 +218,37 @@ def test_update_migrates_download_history_and_keeps_firmware(
             "interrupted",
             "completed",
         }
+
+
+def test_update_rejects_manifest_size_mismatch_without_replacing_database(
+    tmp_path, monkeypatch, make_source, make_product_candidate
+):
+    server_data = tmp_path / "server"
+    client_data = tmp_path / "client"
+    release_dir = tmp_path / "release"
+    _seed_catalog(server_data, make_source, make_product_candidate)
+    export_catalog(data_dir=server_data, output_dir=release_dir, catalog_version="2026.08.07.1")
+    initialize(client_data)
+    database_path = client_data / "firmatlas.db"
+    before = sha256(database_path.read_bytes()).hexdigest()
+    original_download = catalog_update_module.download_and_extract_database
+
+    def wrong_size(*args, **kwargs):
+        result = original_download(*args, **kwargs)
+        return replace(result, compressed_size=result.compressed_size + 1)
+
+    monkeypatch.setattr(catalog_update_module, "download_and_extract_database", wrong_size)
+    config = AppConfig(
+        data_dir=client_data,
+        catalog=CatalogConfig(
+            mode="managed", manifest_url=(release_dir / "manifest.json").as_uri()
+        ),
+    )
+
+    with pytest.raises(CatalogUpdateError, match="压缩包大小"):
+        update_catalog(data_dir=client_data, config=config, replace=True)
+
+    assert sha256(database_path.read_bytes()).hexdigest() == before
 
 
 def test_update_rejects_lineage_mismatch_without_touching_database(

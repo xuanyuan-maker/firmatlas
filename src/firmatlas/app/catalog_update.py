@@ -8,6 +8,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from firmatlas import __version__
 from firmatlas.app.catalog_manifest import CatalogCounts, CatalogManifest
 from firmatlas.app.config import AppConfig
 from firmatlas.domain.errors import CatalogUpdateError
@@ -59,9 +60,12 @@ def check_catalog_update(*, data_dir: Path, config: AppConfig) -> CatalogCheckRe
         allow_insecure_http=config.catalog.allow_insecure_http,
         timeout=config.http.request_timeout,
     )
+    _check_minimum_firmatlas_version(remote)
     local = read_local_manifest(data_dir)
     current_version = local.catalog_version if local else None
-    update_available = local is None or remote.catalog_version > local.catalog_version
+    update_available = local is None or _version_key(remote.catalog_version) > _version_key(
+        local.catalog_version
+    )
     replace_required = (
         local is None
         or remote.lineage_id != local.lineage_id
@@ -133,6 +137,7 @@ def update_catalog(
         allow_insecure_http=config.catalog.allow_insecure_http,
         timeout=config.http.request_timeout,
     )
+    _check_minimum_firmatlas_version(remote)
     local = read_local_manifest(data_dir)
     if local is not None and remote.catalog_version == local.catalog_version:
         return CatalogUpdateReport(
@@ -173,7 +178,7 @@ def update_catalog(
     old_manifest_bytes = manifest_path.read_bytes() if old_manifest_exists else None
     try:
         database_url = resolve_database_url(config.catalog.manifest_url, remote.database.url)
-        download_and_extract_database(
+        downloaded = download_and_extract_database(
             url=database_url,
             compressed_path=compressed_path,
             database_path=candidate_path,
@@ -184,6 +189,12 @@ def update_catalog(
             max_retries=config.http.max_retries,
             retry_backoff_base=config.http.retry_backoff_base,
         )
+        if downloaded.compressed_size != remote.database.compressed_size:
+            raise CatalogUpdateError("Catalog 压缩包大小与 manifest 声明不一致，已删除候选文件。")
+        if downloaded.uncompressed_size != remote.database.uncompressed_size:
+            raise CatalogUpdateError(
+                "Catalog 解压后数据库大小与 manifest 声明不一致，已删除候选文件。"
+            )
         validate_candidate_database(database_path=candidate_path, manifest=remote)
         migration = migrate_download_records(
             candidate_path=candidate_path,
@@ -245,6 +256,30 @@ def _check_remote_version(local: CatalogManifest | None, remote: CatalogManifest
         raise CatalogUpdateError("Catalog 已是最新版本，无需更新。")
     if _version_key(remote.catalog_version) < _version_key(local.catalog_version):
         raise CatalogUpdateError("远程 Catalog 版本低于本地版本，拒绝回滚。")
+
+
+def _check_minimum_firmatlas_version(remote: CatalogManifest) -> None:
+    current = _numeric_version(__version__)
+    minimum = _numeric_version(remote.minimum_firmatlas_version)
+    if current is None:
+        raise CatalogUpdateError(f"当前 FirmAtlas 版本 {__version__!r} 无法参与兼容性检查。")
+    if minimum is None:
+        raise CatalogUpdateError(
+            f"manifest.minimum_firmatlas_version {remote.minimum_firmatlas_version!r} "
+            "不是支持的数字版本。"
+        )
+    if current < minimum:
+        raise CatalogUpdateError(
+            f"当前 FirmAtlas 版本 {__version__} 低于 Catalog 要求的最低版本 "
+            f"{remote.minimum_firmatlas_version}。"
+        )
+
+
+def _numeric_version(value: str) -> tuple[int, ...] | None:
+    parts = value.split(".")
+    if not parts or not all(part.isdigit() for part in parts):
+        return None
+    return tuple(int(part) for part in parts)
 
 
 def _version_key(value: str) -> tuple[int, object]:
