@@ -38,3 +38,7 @@ class ConfigError(FirmAtlasError):
 
 class CatalogManifestError(FirmAtlasError):
     """Catalog manifest 结构、类型或值不符合协议。"""
+
+
+class CatalogExportError(FirmAtlasError):
+    """Catalog 快照导出失败。"""

@@ -16,6 +16,7 @@ import sqlalchemy as sa
 
 from firmatlas import __version__
 from firmatlas.app import registry
+from firmatlas.app.catalog_export import CatalogExportReport, export_catalog
 from firmatlas.app.config import AppConfig, load_config
 from firmatlas.app.crawl import CrawlReport, crawl_source
 from firmatlas.app.download import DownloadReport, download_artifact
@@ -120,6 +121,62 @@ def config_command(ctx: click.Context) -> None:
     click.echo(f"Catalog 清单地址：{config.catalog.manifest_url or '未配置'}")
     click.echo(f"Catalog 备份数量：{config.catalog.backup_count}")
     click.echo(f"允许不安全 HTTP：{'开启' if config.catalog.allow_insecure_http else '关闭'}")
+
+
+@cli.group(name="catalog")
+def catalog_group() -> None:
+    """管理 Catalog 快照与远程目录。"""
+
+
+@catalog_group.command(name="export")
+@click.option(
+    "--output",
+    "output_dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    required=True,
+    help="快照输出目录；目录必须不存在。",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+    help="输出格式。",
+)
+@click.pass_context
+def catalog_export_command(ctx: click.Context, output_dir: Path, output_format: str) -> None:
+    """从当前规范数据库导出纯净 Catalog 快照。"""
+    config: AppConfig = ctx.obj["config"]
+    try:
+        report = export_catalog(data_dir=config.data_dir, output_dir=output_dir)
+    except FirmAtlasError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if output_format == "json":
+        click.echo(json.dumps(_catalog_export_json(report), ensure_ascii=False, indent=2))
+    else:
+        click.echo(f"Catalog 快照已导出：{report.output_dir}")
+        click.echo(f"  manifest：{report.manifest_path}")
+        click.echo(f"  数据库：{report.database_path}")
+        click.echo(f"  lineage：{report.lineage_id}")
+        click.echo(f"  catalog_version：{report.catalog_version}")
+        click.echo(
+            f"  来源 {report.counts.sources}、产品 {report.counts.products}、"
+            f"发布 {report.counts.releases}、Artifact {report.counts.artifacts}"
+        )
+
+
+def _catalog_export_json(report: CatalogExportReport) -> dict[str, object]:
+    return {
+        "schema_version": OUTPUT_SCHEMA_VERSION,
+        "output_dir": str(report.output_dir),
+        "manifest_path": str(report.manifest_path),
+        "database_path": str(report.database_path),
+        "lineage_id": report.lineage_id,
+        "catalog_version": report.catalog_version,
+        "counts": asdict(report.counts),
+    }
 
 
 @cli.command(name="init")
