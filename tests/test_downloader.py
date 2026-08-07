@@ -409,6 +409,76 @@ async def test_download_size_within_tolerance_ok(tmp_path):
 
 
 @pytest.mark.anyio
+async def test_download_tp_link_three_kib_error_is_within_eight_kib_tolerance(tmp_path):
+    content = b"x" * 13_392_896
+    port, _ = _serve_file(tmp_path, content)
+
+    async with httpx.AsyncClient() as client:
+        downloader = Downloader(client)
+        outcome = await downloader.download(
+            url=f"http://127.0.0.1:{port}/test_firmware.bin",
+            dest=tmp_path / "downloads" / "result.bin",
+            expected_size=13_389_824,
+            size_tolerance=8 * 1024,
+        )
+
+    assert isinstance(outcome, DownloadSucceeded)
+    assert outcome.bytes_received == 13_392_896
+
+
+@pytest.mark.anyio
+async def test_download_size_exactly_at_eight_kib_tolerance_is_ok(tmp_path):
+    content = b"x" * 18_192
+    port, _ = _serve_file(tmp_path, content)
+
+    async with httpx.AsyncClient() as client:
+        downloader = Downloader(client)
+        outcome = await downloader.download(
+            url=f"http://127.0.0.1:{port}/test_firmware.bin",
+            dest=tmp_path / "downloads" / "result.bin",
+            expected_size=10_000,
+            size_tolerance=8 * 1024,
+        )
+
+    assert isinstance(outcome, DownloadSucceeded)
+
+
+@pytest.mark.anyio
+async def test_download_size_one_byte_over_eight_kib_tolerance_fails(tmp_path):
+    content = b"x" * 18_193
+    port, _ = _serve_file(tmp_path, content)
+
+    async with httpx.AsyncClient() as client:
+        downloader = Downloader(client)
+        outcome = await downloader.download(
+            url=f"http://127.0.0.1:{port}/test_firmware.bin",
+            dest=tmp_path / "downloads" / "result.bin",
+            expected_size=10_000,
+            size_tolerance=8 * 1024,
+        )
+
+    assert isinstance(outcome, DownloadFailed)
+    assert outcome.error_code is DownloadErrorCode.SIZE_MISMATCH
+
+
+@pytest.mark.anyio
+async def test_download_default_tolerance_remains_exact(tmp_path):
+    content = b"x" * 1_001
+    port, _ = _serve_file(tmp_path, content)
+
+    async with httpx.AsyncClient() as client:
+        downloader = Downloader(client)
+        outcome = await downloader.download(
+            url=f"http://127.0.0.1:{port}/test_firmware.bin",
+            dest=tmp_path / "downloads" / "result.bin",
+            expected_size=1_000,
+        )
+
+    assert isinstance(outcome, DownloadFailed)
+    assert outcome.error_code is DownloadErrorCode.SIZE_MISMATCH
+
+
+@pytest.mark.anyio
 async def test_download_size_beyond_tolerance_fails(tmp_path):
     """偏差超过 size_tolerance → 仍判 size_mismatch。"""
     content = b"x" * 5000

@@ -282,8 +282,8 @@ def test_success_without_official_checksum(uow_factory, seeded_artifact_id, data
     assert report.final_relative_path is not None
     # 下载用例把来源站点根地址作为 Referer 传给下载器（部分厂商校验 Referer）
     assert downloader.referers == ["https://www.tp-link.com.cn/"]
-    # 下载用例对 KB 粒度近似大小放宽 1 KB 容差，避免误判 size_mismatch
-    assert downloader.size_tolerances == [1024]
+    # 普通来源的声明大小允许 8 KiB 单位换算/舍入误差，但底层默认仍是精确校验
+    assert downloader.size_tolerances == [8 * 1024]
     # 归档文件真实存在且内容一致
     final = data_dir / report.final_relative_path
     assert final.read_bytes() == CONTENT
@@ -334,6 +334,28 @@ def test_success_with_matching_sha256(uow_factory, seeded_checksum_artifact_id, 
 
     assert report.status is DownloadStatus.COMPLETED
     assert report.verification_status is VerificationStatus.VERIFIED
+
+
+def test_checksum_mismatch_fails_even_when_size_is_within_tolerance(
+    uow_factory, seeded_checksum_artifact_id, data_dir
+):
+    artifact_id = seeded_checksum_artifact_id(OfficialChecksum("sha256", "0" * 64))
+    downloader = ScriptedDownloader([succeeded()])
+
+    report = run_download(
+        artifact_id=artifact_id,
+        uow_factory=uow_factory,
+        downloader=downloader,
+        data_dir=data_dir,
+    )
+
+    assert report.status is DownloadStatus.FAILED
+    assert report.error_code == "checksum_mismatch"
+    assert report.verification_status is VerificationStatus.MISMATCH
+    assert not list((data_dir / "firmware").rglob("*"))
+    record = get_record(uow_factory, report.download_id)
+    assert record.status is DownloadStatus.FAILED
+    assert record.error_code == "checksum_mismatch"
 
 
 def test_success_with_matching_md5(uow_factory, seeded_checksum_artifact_id, data_dir):
@@ -494,7 +516,7 @@ def test_404_triggers_refresh_then_success(uow_factory, seeded_artifact_id, data
         "https://www.tp-link.com.cn/",
         "https://www.tp-link.com.cn/",
     ]
-    assert downloader.size_tolerances == [1024, 1024]
+    assert downloader.size_tolerances == [8 * 1024, 8 * 1024]
     # 刷新请求带上了 Artifact 身份
     assert len(adapter.requests) == 1
     assert adapter.requests[0].artifact_source_key == "artifact-1"

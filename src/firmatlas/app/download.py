@@ -49,10 +49,10 @@ _REFRESHABLE_CODES = frozenset(
 # 再在用例层放大到 4 MiB，避免大文件下载时高频写 SQLite
 _PROGRESS_DB_THRESHOLD = 4 * 1024 * 1024
 
-# 大小校验容差（字节）：默认来源只需要覆盖 KB 粒度误差；Omada API 的 MB
-# 使用 1000 KiB 且只保留两位小数，理论舍入误差接近 5 KiB，单独放宽到 8 KiB。
-# Dahua API 的 MB 保留两位小数，实际文件与声明的舍入误差约 4 KiB，同样放宽到 8 KiB。
-_DEFAULT_SIZE_TOLERANCE_BYTES = 1024
+# 大小校验容差（字节）：advertised_size 是厂商页面/API 的近似元数据，可能存在
+# KB/MB 单位换算、取整或有限小数位舍入误差；默认允许最多 8 KiB。它不是完整性校验，
+# 有官方 checksum 时仍必须精确匹配。来源特殊精度可通过下表覆盖默认值。
+_DEFAULT_SIZE_TOLERANCE_BYTES = 8 * 1024
 _SIZE_TOLERANCE_BY_SOURCE = {"dahua-global": 8 * 1024, "omada-global": 8 * 1024}
 
 

@@ -65,7 +65,8 @@ class Downloader:
         校验 Referer，缺失即 403，如 service.tp-link.com.cn）。
         size_tolerance 是 expected_size 的允许偏差（字节）：实际大小与
         预期相差不超过它即视为通过。默认 0（精确比对）；当来源大小为
-        KB 粒度近似值（如 tp-link-cn docSize）时由调用方放宽到 1024。
+        厂商声明大小是 KB/MB 粒度近似值时由调用方按来源策略放宽。该容差不替代
+        官方 checksum 校验；边界条件为 abs(实际大小 - 预期大小) <= 容差。
 
         调用方负责：
         - 确保 dest 的父目录存在
@@ -135,11 +136,15 @@ class Downloader:
             on_progress(bytes_received)
 
         # 大小校验（expected_size 不为 None 时才比较；size_tolerance 允许偏差）
-        if expected_size is not None and abs(bytes_received - expected_size) > size_tolerance:
+        size_difference = abs(bytes_received - expected_size) if expected_size is not None else None
+        if size_difference is not None and size_difference > size_tolerance:
             return DownloadFailed(
                 error_code=DownloadErrorCode.SIZE_MISMATCH,
                 http_status=None,
-                detail=f"大小不符：预期 {expected_size} B，实际 {bytes_received} B",
+                detail=(
+                    f"大小不符：预期 {expected_size} B，实际 {bytes_received} B，"
+                    f"差值 {size_difference} B，允许误差 {size_tolerance} B"
+                ),
                 bytes_received=bytes_received,
             )
 
