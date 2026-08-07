@@ -15,7 +15,7 @@ command -v gzip >/dev/null || { echo "需要 gzip 校验数据库。" >&2; exit 
 
 jq -e '.format_version == 1 and .database.compression == "gzip" and .counts.downloads == 0' \
   "$manifest" >/dev/null
-sha256sum --check "$checksum" >/dev/null
+(cd "$output_dir" && sha256sum --check "$(basename "$checksum")" >/dev/null)
 gzip -t "$database"
 
 echo "Catalog 发布资产校验通过：$output_dir"
