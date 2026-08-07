@@ -158,6 +158,9 @@ def catalog_export_command(ctx: click.Context, output_dir: Path, output_format: 
     try:
         report = export_catalog(data_dir=config.data_dir, output_dir=output_dir)
     except FirmAtlasError as exc:
+        if output_format == "json":
+            _echo_json_error(exc)
+            raise SystemExit(1) from None
         raise click.ClickException(str(exc)) from exc
 
     if output_format == "json":
@@ -190,6 +193,9 @@ def catalog_status_command(ctx: click.Context, output_format: str) -> None:
     try:
         report = get_catalog_status(data_dir=config.data_dir, config=config.catalog)
     except FirmAtlasError as exc:
+        if output_format == "json":
+            _echo_json_error(exc)
+            raise SystemExit(1) from None
         raise click.ClickException(str(exc)) from exc
 
     if output_format == "json":
@@ -228,6 +234,9 @@ def catalog_update_command(
         else:
             report = update_catalog(data_dir=config.data_dir, config=config, replace=replace)
     except FirmAtlasError as exc:
+        if output_format == "json":
+            _echo_json_error(exc)
+            raise SystemExit(1) from None
         raise click.ClickException(str(exc)) from exc
     if output_format == "json":
         payload = _catalog_check_json(report) if check_only else _catalog_update_json(report)
@@ -311,6 +320,19 @@ def _catalog_export_json(report: CatalogExportReport) -> dict[str, object]:
         "catalog_version": report.catalog_version,
         "counts": asdict(report.counts),
     }
+
+
+def _echo_json_error(error: BaseException) -> None:
+    click.echo(
+        json.dumps(
+            {
+                "schema_version": OUTPUT_SCHEMA_VERSION,
+                "error_code": _error_code(error),
+                "error": str(error),
+            },
+            ensure_ascii=False,
+        )
+    )
 
 
 @cli.command(name="init")
@@ -956,6 +978,7 @@ def _error_code(error: BaseException) -> str:
         "UnknownArtifactError": "artifact_not_found",
         "ActiveDownloadExistsError": "download_active",
         "CatalogManifestError": "manifest_invalid",
+        "CatalogExportError": "catalog_export_error",
         "CatalogSourceError": "catalog_source_error",
         "CatalogUpdateError": "catalog_update_error",
         "DatabaseNotInitializedError": "database_not_initialized",

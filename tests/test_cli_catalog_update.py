@@ -78,6 +78,30 @@ manifest_url = "{(remote / "manifest.json").as_uri()}"
     assert "首次安装必须使用 --replace" in result.output
 
 
+def test_catalog_update_json_failure_is_machine_readable(tmp_path):
+    config_path = tmp_path / "managed.toml"
+    config_path.write_text(
+        f"""
+data_dir = "{tmp_path / "data"}"
+[catalog]
+mode = "managed"
+manifest_url = "{(tmp_path / "missing-manifest.json").as_uri()}"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        ["--config", str(config_path), "catalog", "update", "--format", "json"],
+    )
+
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["schema_version"] == 1
+    assert payload["error_code"] == "catalog_source_error"
+    assert result.stderr == ""
+
+
 def test_catalog_update_replace_json(tmp_path):
     runner = CliRunner()
     server_data = tmp_path / "server"
