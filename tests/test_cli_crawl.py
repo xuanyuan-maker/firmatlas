@@ -68,6 +68,13 @@ def test_init_seeds_sources(tmp_path):
     assert "zyxel-global" in result.output
     assert "Zyxel" in result.output
 
+    result = runner.invoke(
+        cli, ["--data-dir", str(tmp_path / "data"), "sources", "--format", "json"]
+    )
+    assert result.exit_code == 0, result.output
+    assert '"schema_version": 1' in result.output
+    assert '"source_key": "tp-link-cn"' in result.output
+
 
 def test_init_is_idempotent_for_seeds(tmp_path):
     runner = CliRunner()

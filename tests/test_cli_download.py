@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -52,7 +53,13 @@ class ScriptedDownloader:
         }
 
     async def download(
-        self, *, url, dest: Path, expected_size=None, on_progress=None, referer=None,
+        self,
+        *,
+        url,
+        dest: Path,
+        expected_size=None,
+        on_progress=None,
+        referer=None,
         size_tolerance=0,
     ):
         outcome = ScriptedDownloader.outcomes.pop(0)
@@ -119,6 +126,43 @@ def test_download_success_and_history(seeded_cli):
     assert result.exit_code == 0, result.output
     assert "completed" in result.output
     assert artifact_id[:8] in result.output
+
+    result = runner.invoke(cli, ["--data-dir", data, "downloads", "--format", "json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["schema_version"] == 1
+    assert payload["count"] == 1
+    assert payload["records"][0]["status"] == "completed"
+
+
+def test_download_json_is_single_machine_readable_document(seeded_cli):
+    runner, data, artifact_id = seeded_cli
+    ScriptedDownloader.outcomes = [succeeded()]
+
+    result = runner.invoke(cli, ["--data-dir", data, "download", artifact_id, "--format", "json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["schema_version"] == 1
+    assert payload["results"][0]["artifact_id"] == artifact_id
+    assert payload["results"][0]["status"] == "completed"
+    assert payload["errors"] == []
+
+
+def test_download_json_keeps_errors_on_stderr(seeded_cli):
+    runner, data, _artifact_id = seeded_cli
+
+    result = runner.invoke(
+        cli, ["--data-dir", data, "download", "missing-artifact", "--format", "json"]
+    )
+
+    assert result.exit_code != 0
+    payload = json.loads(result.stdout)
+    assert payload["schema_version"] == 1
+    assert payload["results"] == []
+    assert payload["errors"][0]["input"] == "missing-artifact"
+    assert payload["errors"][0]["error_code"] == "artifact_not_found"
+    assert "missing-artifact" in result.stderr
 
 
 def test_download_receives_effective_timeout_config(seeded_cli, tmp_path):
@@ -191,8 +235,12 @@ def test_download_accepts_release_id(seeded_cli):
 
 
 def test_download_release_with_multiple_artifacts_lists_choices(
-    tmp_path, monkeypatch, make_product_candidate, make_revision_candidate,
-    make_release_candidate, make_artifact_candidate,
+    tmp_path,
+    monkeypatch,
+    make_product_candidate,
+    make_revision_candidate,
+    make_release_candidate,
+    make_artifact_candidate,
 ):
     """发布下有多个 Artifact：列出候选并要求指定，退出码 1。"""
     runner = CliRunner()
@@ -212,7 +260,9 @@ def test_download_release_with_multiple_artifacts_lists_choices(
         DiscoveredProduct(product=product),
         DiscoveryCompleted(is_complete=True, incomplete_reason=None, issues=()),
     ]
-    monkeypatch.setattr(registry, "build_adapter", lambda key, http, data_dir=None: FakeAdapter(list(events)))
+    monkeypatch.setattr(
+        registry, "build_adapter", lambda key, http, data_dir=None: FakeAdapter(list(events))
+    )
     result = runner.invoke(cli, ["--data-dir", data, "crawl", "tp-link-cn"])
     assert result.exit_code == 0, result.output
 
@@ -234,8 +284,10 @@ def test_download_failure_exits_nonzero(seeded_cli):
     runner, data, artifact_id = seeded_cli
     ScriptedDownloader.outcomes = [
         DownloadFailed(
-            error_code=DownloadErrorCode.HTTP_5XX, http_status=500,
-            detail="HTTP 500", bytes_received=0,
+            error_code=DownloadErrorCode.HTTP_5XX,
+            http_status=500,
+            detail="HTTP 500",
+            bytes_received=0,
         )
     ]
 

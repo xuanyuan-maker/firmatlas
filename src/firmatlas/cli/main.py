@@ -26,7 +26,7 @@ from firmatlas.app.catalog_update import (
 )
 from firmatlas.app.config import AppConfig, load_config
 from firmatlas.app.crawl import CrawlReport, crawl_source
-from firmatlas.app.download import DownloadReport, download_artifact
+from firmatlas.app.download import DownloadReport, UnknownArtifactError, download_artifact
 from firmatlas.app.queries import OUTPUT_SCHEMA_VERSION, CatalogFilter
 from firmatlas.app.recovery import recover_stale_operations
 from firmatlas.domain.errors import FirmAtlasError
@@ -397,8 +397,16 @@ def _echo_report(report: CrawlReport) -> None:
 
 
 @cli.command(name="sources")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+    help="输出格式。",
+)
 @click.pass_context
-def sources_command(ctx: click.Context) -> None:
+def sources_command(ctx: click.Context, output_format: str) -> None:
     """列出已注册的固件来源。"""
     data_dir = Path(ctx.obj["data_dir"])
     try:
@@ -411,6 +419,14 @@ def sources_command(ctx: click.Context) -> None:
     finally:
         engine.dispose()
 
+    if output_format == "json":
+        payload = {
+            "schema_version": OUTPUT_SCHEMA_VERSION,
+            "count": len(sources),
+            "sources": [_jsonable(asdict(source)) for source in sources],
+        }
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
     if not sources:
         click.echo("尚无注册来源，请先运行 firmatlas init。")
         return
@@ -664,8 +680,16 @@ def show_command(ctx: click.Context, release_id: str, output_format: str) -> Non
 
 @cli.command(name="download")
 @click.argument("artifact_ids", nargs=-1, required=True)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+    help="输出格式。",
+)
 @click.pass_context
-def download_command(ctx: click.Context, artifact_ids: tuple[str, ...]) -> None:
+def download_command(ctx: click.Context, artifact_ids: tuple[str, ...], output_format: str) -> None:
     """下载固件并校验归档（接受 list 的发布 ID 或 show 的 Artifact ID，可用前缀）。"""
     data_dir = Path(ctx.obj["data_dir"])
     config: AppConfig = ctx.obj["config"]
@@ -677,6 +701,8 @@ def download_command(ctx: click.Context, artifact_ids: tuple[str, ...]) -> None:
     uow_factory = SqliteUnitOfWorkFactory(engine)
     store = ArtifactStore(data_dir)
     failures = 0
+    reports: list[DownloadReport] = []
+    errors: list[dict[str, str]] = []
 
     async def _run_all() -> None:
         nonlocal failures
@@ -688,6 +714,9 @@ def download_command(ctx: click.Context, artifact_ids: tuple[str, ...]) -> None:
                     artifact_id, source_key = _resolve_artifact(engine, uow_factory, raw_id)
                 except FirmAtlasError as exc:
                     failures += 1
+                    errors.append(
+                        {"input": raw_id, "error_code": _error_code(exc), "error": str(exc)}
+                    )
                     click.echo(f"{raw_id}: {exc}", err=True)
                     continue
                 legacy_tls = registry.requires_legacy_tls(source_key)
@@ -718,9 +747,18 @@ def download_command(ctx: click.Context, artifact_ids: tuple[str, ...]) -> None:
                     )
                 except FirmAtlasError as exc:
                     failures += 1
+                    errors.append(
+                        {
+                            "input": artifact_id,
+                            "error_code": _error_code(exc),
+                            "error": str(exc),
+                        }
+                    )
                     click.echo(f"{artifact_id}: {exc}", err=True)
                     continue
-                _echo_download_report(report)
+                reports.append(report)
+                if output_format == "table":
+                    _echo_download_report(report)
                 if report.status is not DownloadStatus.COMPLETED:
                     failures += 1
 
@@ -729,6 +767,14 @@ def download_command(ctx: click.Context, artifact_ids: tuple[str, ...]) -> None:
     finally:
         engine.dispose()
 
+    if output_format == "json":
+        payload = {
+            "schema_version": OUTPUT_SCHEMA_VERSION,
+            "count": len(reports),
+            "results": [_jsonable(asdict(report)) for report in reports],
+            "errors": errors,
+        }
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
     if failures:
         raise SystemExit(1)
 
@@ -754,7 +800,7 @@ def _resolve_artifact(engine, uow_factory, raw_id: str) -> tuple[str, str]:
     # 未命中 Artifact：尝试按发布 ID 解析（list 输出的短 ID）
     release_matches = service.find_release_ids_by_prefix(raw_id)
     if not release_matches:
-        raise FirmAtlasError(f"未找到 Artifact 或发布 {raw_id!r}。")
+        raise UnknownArtifactError(f"未找到 Artifact 或发布 {raw_id!r}。")
     if len(release_matches) > 1:
         raise FirmAtlasError(
             f"ID 前缀 {raw_id!r} 匹配到 {len(release_matches)} 个发布，请提供更长的前缀。"
@@ -825,9 +871,21 @@ def _echo_download_report(report: DownloadReport) -> None:
 )
 @click.option("--artifact", "artifact_id", default=None, help="只看指定 Artifact 的记录。")
 @click.option("--limit", default=20, show_default=True, help="最多显示条数。")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+    help="输出格式。",
+)
 @click.pass_context
 def downloads_command(
-    ctx: click.Context, status: str | None, artifact_id: str | None, limit: int
+    ctx: click.Context,
+    status: str | None,
+    artifact_id: str | None,
+    limit: int,
+    output_format: str,
 ) -> None:
     """列出下载历史（最新在前）。"""
     data_dir = Path(ctx.obj["data_dir"])
@@ -845,6 +903,14 @@ def downloads_command(
     finally:
         engine.dispose()
 
+    if output_format == "json":
+        payload = {
+            "schema_version": OUTPUT_SCHEMA_VERSION,
+            "count": len(records),
+            "records": [_jsonable(asdict(record)) for record in records],
+        }
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
     if not records:
         click.echo("暂无下载记录。")
         return
@@ -882,6 +948,22 @@ def _jsonable(value: object) -> object:
     if isinstance(value, (dt.datetime, dt.date)):
         return value.isoformat()
     return value
+
+
+def _error_code(error: BaseException) -> str:
+    """将 FirmAtlas 异常映射为稳定机器代码；不把异常文本当作协议。"""
+    names = {
+        "UnknownArtifactError": "artifact_not_found",
+        "ActiveDownloadExistsError": "download_active",
+        "CatalogManifestError": "manifest_invalid",
+        "CatalogSourceError": "catalog_source_error",
+        "CatalogUpdateError": "catalog_update_error",
+        "DatabaseNotInitializedError": "database_not_initialized",
+        "SchemaVersionMismatchError": "schema_version_mismatch",
+        "ProcessLockError": "data_lock_conflict",
+        "ConfigError": "config_invalid",
+    }
+    return names.get(type(error).__name__, "firmatlas_error")
 
 
 def _echo_table(headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> None:
