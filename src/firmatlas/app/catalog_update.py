@@ -5,9 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from firmatlas.app.catalog_manifest import CatalogCounts
+from firmatlas.app.catalog_manifest import CatalogCounts, CatalogManifest
 from firmatlas.app.config import AppConfig
 from firmatlas.domain.errors import CatalogUpdateError
+from firmatlas.domain.timeutil import format_rfc3339
+from firmatlas.infra.catalog_snapshot import CatalogSnapshotStats, inspect_clean_database
 from firmatlas.infra.catalog_source import fetch_manifest, read_local_manifest
 
 
@@ -50,3 +52,45 @@ def check_catalog_update(*, data_dir: Path, config: AppConfig) -> CatalogCheckRe
         current_counts=local.counts if local else None,
         remote_counts=remote.counts,
     )
+
+
+def validate_candidate_database(
+    *, database_path: Path, manifest: CatalogManifest
+) -> CatalogSnapshotStats:
+    """校验候选库结构、纯净约束、总计数和来源统计。"""
+    stats = inspect_clean_database(database_path)
+    if manifest.schema_version != 1:
+        raise CatalogUpdateError(
+            f"manifest schema_version={manifest.schema_version} 与当前程序不兼容。"
+        )
+    actual_counts = CatalogCounts(
+        sources=stats.sources,
+        products=stats.products,
+        releases=stats.releases,
+        artifacts=stats.artifacts,
+        downloads=stats.downloads,
+    )
+    if actual_counts != manifest.counts:
+        raise CatalogUpdateError(
+            f"候选数据库计数 {actual_counts} 与 manifest 计数 {manifest.counts} 不一致。"
+        )
+    expected_sources = {source.source_key: source for source in manifest.sources}
+    actual_sources = {source.source_key: source for source in stats.source_stats}
+    if set(expected_sources) != set(actual_sources):
+        raise CatalogUpdateError("候选数据库来源集合与 manifest 不一致。")
+    for source_key, expected in expected_sources.items():
+        actual = actual_sources[source_key]
+        if (
+            actual.last_success_at
+            != (
+                format_rfc3339(expected.last_success_at)
+                if expected.last_success_at is not None
+                else None
+            )
+            or actual.last_status != expected.last_status
+            or actual.products != expected.products
+            or actual.releases != expected.releases
+            or actual.artifacts != expected.artifacts
+        ):
+            raise CatalogUpdateError(f"来源 {source_key} 的 manifest 统计与候选数据库不一致。")
+    return stats

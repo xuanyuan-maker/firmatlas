@@ -1,11 +1,15 @@
 """Catalog update --check 用例测试。"""
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
+import pytest
+
 from firmatlas.app.catalog_manifest import CatalogCounts, CatalogDatabase, CatalogManifest
-from firmatlas.app.catalog_update import check_catalog_update
+from firmatlas.app.catalog_update import check_catalog_update, validate_candidate_database
 from firmatlas.app.config import AppConfig, CatalogConfig
 from firmatlas.domain.errors import CatalogUpdateError
+from firmatlas.infra.database import initialize
 
 
 def make_manifest(*, version="2026.08.07.1", lineage="11111111-1111-4111-8111-111111111111"):
@@ -72,3 +76,24 @@ def test_check_rejects_standalone(tmp_path):
         assert "Standalone" in str(exc)
     else:
         raise AssertionError("expected CatalogUpdateError")
+
+
+def test_validate_candidate_database_accepts_matching_empty_database(tmp_path):
+    data_dir = tmp_path / "data"
+    initialize(data_dir)
+    manifest = make_manifest()
+    manifest = replace(manifest, counts=CatalogCounts(0, 0, 0, 0, 0))
+
+    stats = validate_candidate_database(database_path=data_dir / "firmatlas.db", manifest=manifest)
+
+    assert stats.sources == 0
+
+
+def test_validate_candidate_database_rejects_count_mismatch(tmp_path):
+    data_dir = tmp_path / "data"
+    initialize(data_dir)
+
+    with pytest.raises(CatalogUpdateError, match="计数"):
+        validate_candidate_database(
+            database_path=data_dir / "firmatlas.db", manifest=make_manifest()
+        )
