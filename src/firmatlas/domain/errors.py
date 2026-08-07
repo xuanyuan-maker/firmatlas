@@ -46,3 +46,7 @@ class CatalogExportError(FirmAtlasError):
 
 class CatalogSourceError(FirmAtlasError):
     """Catalog 来源读取或 URL 解析失败。"""
+
+
+class CatalogUpdateError(FirmAtlasError):
+    """Catalog 更新前置检查或更新过程失败。"""

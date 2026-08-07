@@ -18,6 +18,7 @@ from firmatlas import __version__
 from firmatlas.app import registry
 from firmatlas.app.catalog_export import CatalogExportReport, export_catalog
 from firmatlas.app.catalog_status import CatalogStatusReport, get_catalog_status
+from firmatlas.app.catalog_update import CatalogCheckReport, check_catalog_update
 from firmatlas.app.config import AppConfig, load_config
 from firmatlas.app.crawl import CrawlReport, crawl_source
 from firmatlas.app.download import DownloadReport, download_artifact
@@ -197,6 +198,39 @@ def catalog_status_command(ctx: click.Context, output_format: str) -> None:
     click.echo(f"本地版本：{manifest.catalog_version if manifest else '未安装'}")
 
 
+@catalog_group.command(name="update")
+@click.option("--check", "check_only", is_flag=True, default=False, help="只检查远程快照，不下载。")
+@click.option("--replace", is_flag=True, default=False, help="允许跨 lineage 整体替换。")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+    help="输出格式。",
+)
+@click.pass_context
+def catalog_update_command(
+    ctx: click.Context, check_only: bool, replace: bool, output_format: str
+) -> None:
+    """检查或更新 Managed Catalog（更新下载流程随后实现）。"""
+    if not check_only:
+        raise click.ClickException(
+            "Catalog 更新下载流程尚未执行；当前只支持 catalog update --check。"
+        )
+    if replace:
+        raise click.ClickException("catalog update --check 不需要 --replace。")
+    config: AppConfig = ctx.obj["config"]
+    try:
+        report = check_catalog_update(data_dir=config.data_dir, config=config)
+    except FirmAtlasError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if output_format == "json":
+        click.echo(json.dumps(_catalog_check_json(report), ensure_ascii=False, indent=2))
+    else:
+        _echo_catalog_check(report)
+
+
 def _catalog_status_json(report: CatalogStatusReport) -> dict[str, object]:
     manifest = report.local_manifest
     return {
@@ -207,6 +241,32 @@ def _catalog_status_json(report: CatalogStatusReport) -> dict[str, object]:
         "lineage_id": manifest.lineage_id if manifest else None,
         "catalog_version": manifest.catalog_version if manifest else None,
     }
+
+
+def _catalog_check_json(report: CatalogCheckReport) -> dict[str, object]:
+    return {
+        "schema_version": OUTPUT_SCHEMA_VERSION,
+        "current_lineage_id": report.current_lineage_id,
+        "current_catalog_version": report.current_catalog_version,
+        "remote_lineage_id": report.remote_lineage_id,
+        "remote_catalog_version": report.remote_catalog_version,
+        "update_available": report.update_available,
+        "replace_required": report.replace_required,
+        "current_counts": asdict(report.current_counts) if report.current_counts else None,
+        "remote_counts": asdict(report.remote_counts),
+    }
+
+
+def _echo_catalog_check(report: CatalogCheckReport) -> None:
+    current = report.current_catalog_version or "未安装"
+    state = "有更新" if report.update_available else "无需更新"
+    if report.replace_required:
+        state += "（需要 --replace 或首次安装）"
+    click.echo(f"当前版本：{current}")
+    click.echo(f"远程版本：{report.remote_catalog_version}")
+    click.echo(f"状态：{state}")
+    click.echo(f"当前 lineage：{report.current_lineage_id or '未安装'}")
+    click.echo(f"远程 lineage：{report.remote_lineage_id}")
 
 
 def _catalog_export_json(report: CatalogExportReport) -> dict[str, object]:
