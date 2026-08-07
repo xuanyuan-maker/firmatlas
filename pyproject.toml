@@ -1,6 +1,6 @@
 [project]
 name = "firmatlas"
-version = "0.1.1"
+version = "0.1.2"
 description = "实验性质的 IoT 固件发现与按需获取工具"
 readme = "README.md"
 authors = [
