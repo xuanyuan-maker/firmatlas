@@ -2,9 +2,11 @@
 
 import gzip
 import hashlib
+from contextlib import contextmanager
 
 import pytest
 
+import firmatlas.infra.catalog_updater as catalog_updater_module
 from firmatlas.domain.errors import CatalogUpdateError
 from firmatlas.infra.catalog_updater import download_and_extract_database
 
@@ -79,3 +81,35 @@ def test_download_enforces_decompression_limit(tmp_path):
             expected_database_sha256=hashlib.sha256(payload).hexdigest(),
             max_uncompressed_bytes=4,
         )
+
+
+def test_download_retries_transient_source_failure(tmp_path, monkeypatch):
+    source = tmp_path / "source.gz"
+    payload = b"retry candidate"
+    with gzip.open(source, "wb") as handle:
+        handle.write(payload)
+    original_open = catalog_updater_module.open_catalog_url
+    calls = 0
+
+    @contextmanager
+    def flaky_open(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError("temporary network failure")
+        with original_open(*args, **kwargs) as handle:
+            yield handle
+
+    monkeypatch.setattr(catalog_updater_module, "open_catalog_url", flaky_open)
+    result = download_and_extract_database(
+        url=source.as_uri(),
+        compressed_path=tmp_path / "source-copy.gz",
+        database_path=tmp_path / "candidate.db",
+        expected_compressed_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
+        expected_database_sha256=hashlib.sha256(payload).hexdigest(),
+        max_retries=1,
+        retry_backoff_base=0,
+    )
+
+    assert calls == 2
+    assert result.database_path.read_bytes() == payload

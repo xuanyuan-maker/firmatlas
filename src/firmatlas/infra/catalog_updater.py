@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import sqlite3
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -64,6 +65,8 @@ def download_and_extract_database(
     expected_database_sha256: str,
     allow_insecure_http: bool = False,
     timeout: float = 60.0,
+    max_retries: int = 3,
+    retry_backoff_base: float = 1.0,
     max_compressed_bytes: int = DEFAULT_MAX_COMPRESSED_BYTES,
     max_uncompressed_bytes: int = DEFAULT_MAX_UNCOMPRESSED_BYTES,
 ) -> DownloadedDatabase:
@@ -79,6 +82,8 @@ def download_and_extract_database(
             allow_insecure_http=allow_insecure_http,
             timeout=timeout,
             max_bytes=max_compressed_bytes,
+            max_retries=max_retries,
+            retry_backoff_base=retry_backoff_base,
         )
         if compressed_sha256 != expected_compressed_sha256:
             raise CatalogUpdateError("Catalog 数据库压缩包 SHA-256 不匹配，已删除候选文件。")
@@ -112,21 +117,38 @@ def _download_compressed(
     allow_insecure_http: bool,
     timeout: float,
     max_bytes: int,
+    max_retries: int,
+    retry_backoff_base: float,
 ) -> tuple[int, str]:
-    digest = hashlib.sha256()
-    total = 0
-    with open_catalog_url(url, allow_insecure_http=allow_insecure_http, timeout=timeout) as source:
-        content_length = getattr(source, "headers", {}).get("Content-Length")
-        if content_length is not None and int(content_length) > max_bytes:
-            raise CatalogUpdateError("Catalog 压缩包 Content-Length 超过大小限制。")
-        with path.open("wb") as target:
-            while chunk := source.read(_CHUNK_SIZE):
-                total += len(chunk)
-                if total > max_bytes:
-                    raise CatalogUpdateError("Catalog 压缩包超过大小限制。")
-                digest.update(chunk)
-                target.write(chunk)
-    return total, digest.hexdigest()
+    if max_retries < 0 or retry_backoff_base < 0:
+        raise CatalogUpdateError("Catalog 下载重试参数不能小于 0。")
+    last_error: Exception | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            digest = hashlib.sha256()
+            total = 0
+            with open_catalog_url(
+                url, allow_insecure_http=allow_insecure_http, timeout=timeout
+            ) as source:
+                content_length = getattr(source, "headers", {}).get("Content-Length")
+                if content_length is not None and int(content_length) > max_bytes:
+                    raise CatalogUpdateError("Catalog 压缩包 Content-Length 超过大小限制。")
+                with path.open("wb") as target:
+                    while chunk := source.read(_CHUNK_SIZE):
+                        total += len(chunk)
+                        if total > max_bytes:
+                            raise CatalogUpdateError("Catalog 压缩包超过大小限制。")
+                        digest.update(chunk)
+                        target.write(chunk)
+            return total, digest.hexdigest()
+        except CatalogUpdateError:
+            raise
+        except (OSError, CatalogSourceError) as exc:
+            last_error = exc
+            if attempt < max_retries:
+                time.sleep(retry_backoff_base * (2**attempt))
+    assert last_error is not None
+    raise last_error
 
 
 def _extract_database(

@@ -181,6 +181,8 @@ def update_catalog(
             expected_database_sha256=remote.database.database_sha256,
             allow_insecure_http=config.catalog.allow_insecure_http,
             timeout=config.http.request_timeout,
+            max_retries=config.http.max_retries,
+            retry_backoff_base=config.http.retry_backoff_base,
         )
         validate_candidate_database(database_path=candidate_path, manifest=remote)
         migration = migrate_download_records(
@@ -241,8 +243,15 @@ def _check_remote_version(local: CatalogManifest | None, remote: CatalogManifest
         return
     if remote.catalog_version == local.catalog_version:
         raise CatalogUpdateError("Catalog 已是最新版本，无需更新。")
-    if remote.catalog_version < local.catalog_version:
+    if _version_key(remote.catalog_version) < _version_key(local.catalog_version):
         raise CatalogUpdateError("远程 Catalog 版本低于本地版本，拒绝回滚。")
+
+
+def _version_key(value: str) -> tuple[int, object]:
+    parts = value.split(".")
+    if all(part.isdigit() for part in parts):
+        return 0, tuple(int(part) for part in parts)
+    return 1, value
 
 
 def _backup_current_state(

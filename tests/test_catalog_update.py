@@ -77,6 +77,23 @@ def test_check_reports_no_update_for_same_version(tmp_path, monkeypatch):
     assert report.replace_required is False
 
 
+def test_update_returns_up_to_date_without_replacing_database(tmp_path, monkeypatch):
+    remote = make_manifest()
+    (tmp_path / "catalog-manifest.json").write_text(remote.to_json(), encoding="utf-8")
+    monkeypatch.setattr(
+        "firmatlas.app.catalog_update.fetch_manifest", lambda *args, **kwargs: remote
+    )
+    config = AppConfig(
+        data_dir=tmp_path,
+        catalog=CatalogConfig(mode="managed", manifest_url="file:///manifest.json"),
+    )
+
+    report = update_catalog(data_dir=tmp_path, config=config)
+
+    assert report.status == "up_to_date"
+    assert report.migrated_downloads == 0
+
+
 def test_check_rejects_standalone(tmp_path):
     config = AppConfig(data_dir=tmp_path)
 

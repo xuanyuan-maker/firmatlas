@@ -1,6 +1,8 @@
 """Catalog 来源读取与相对 URL 测试。"""
 
 from datetime import UTC, datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 
 import pytest
 
@@ -67,6 +69,36 @@ def test_fetch_manifest_from_http_sources_when_allowed(monkeypatch, url):
     )
 
     manifest = fetch_manifest(url, allow_insecure_http=True)
+
+    assert manifest.catalog_version == "2026.08.07.1"
+
+
+def test_fetch_manifest_from_loopback_http():
+    payload = manifest_json().encode("utf-8")
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, format, *args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        manifest = fetch_manifest(
+            f"http://127.0.0.1:{server.server_port}/manifest.json",
+            allow_insecure_http=True,
+        )
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
 
     assert manifest.catalog_version == "2026.08.07.1"
 
