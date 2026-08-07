@@ -28,6 +28,10 @@ def test_load_config_uses_linux_platform_defaults_without_file(tmp_path, monkeyp
     assert config.http.retry_backoff_base == 1.0
     assert config.download.read_timeout == 60.0
     assert config.download.connect_timeout == 10.0
+    assert config.catalog.mode == "standalone"
+    assert config.catalog.manifest_url is None
+    assert config.catalog.backup_count == 2
+    assert config.catalog.allow_insecure_http is False
     assert config.config_path is None
 
 
@@ -88,6 +92,87 @@ def test_load_config_uses_environment_config_path(tmp_path, monkeypatch):
 
     assert config.config_path == config_path
     assert config.verbose is True
+
+
+def test_load_config_parses_catalog_settings(tmp_path):
+    path = tmp_path / "firmatlas.toml"
+    path.write_text(
+        """
+[catalog]
+mode = "managed"
+manifest_url = "https://catalog.example.com/manifest.json"
+backup_count = 5
+allow_insecure_http = false
+""".strip(),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path=path)
+
+    assert config.catalog.mode == "managed"
+    assert config.catalog.manifest_url == "https://catalog.example.com/manifest.json"
+    assert config.catalog.backup_count == 5
+    assert config.catalog.allow_insecure_http is False
+
+
+def test_load_config_allows_http_only_when_explicitly_enabled(tmp_path):
+    path = tmp_path / "firmatlas.toml"
+    path.write_text(
+        """
+[catalog]
+mode = "managed"
+manifest_url = "http://catalog.example.com/manifest.json"
+allow_insecure_http = true
+""".strip(),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path=path)
+
+    assert config.catalog.manifest_url == "http://catalog.example.com/manifest.json"
+    assert config.catalog.allow_insecure_http is True
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        ('[catalog]\nmode = "remote"', "只能是 standalone 或 managed"),
+        ('[catalog]\nmode = "managed"', "必须配置 catalog.manifest_url"),
+        ("[catalog]\nbackup_count = 0", "必须在 1 到 10 之间"),
+        ("[catalog]\nbackup_count = 11", "必须在 1 到 10 之间"),
+        ("[catalog]\nbackup_count = true", "必须是整数"),
+        ('[catalog]\nallow_insecure_http = "yes"', "必须是布尔值"),
+        (
+            '[catalog]\nmanifest_url = "http://catalog.example.com/manifest.json"',
+            "必须同时开启",
+        ),
+        ('[catalog]\nmanifest_url = "ftp://catalog.example.com/manifest.json"', "只允许使用"),
+        ('[catalog]\nmanifest_url = "https://"', "不是有效的 HTTP URL"),
+        ('[catalog]\nmanifest_url = "file://"', "不是有效的 file URL"),
+    ],
+)
+def test_load_config_rejects_invalid_catalog_settings(tmp_path, content, message):
+    path = tmp_path / "invalid-catalog.toml"
+    path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(ConfigError, match=message):
+        load_config(config_path=path)
+
+
+def test_load_config_allows_file_manifest_url(tmp_path):
+    path = tmp_path / "firmatlas.toml"
+    path.write_text(
+        """
+[catalog]
+mode = "managed"
+manifest_url = "file:///srv/firmatlas-catalog/manifest.json"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path=path)
+
+    assert config.catalog.manifest_url == "file:///srv/firmatlas-catalog/manifest.json"
 
 
 @pytest.mark.parametrize("environment_name", ["FIRMATLAS_CONFIG", "FIRMATLAS_DATA_DIR"])

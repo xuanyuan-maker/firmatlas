@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from math import isfinite
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from firmatlas.domain.errors import ConfigError
 
@@ -28,18 +29,28 @@ class DownloadConfig:
 
 
 @dataclass(frozen=True)
+class CatalogConfig:
+    mode: str = "standalone"
+    manifest_url: str | None = None
+    backup_count: int = 2
+    allow_insecure_http: bool = False
+
+
+@dataclass(frozen=True)
 class AppConfig:
     data_dir: Path = field(default_factory=lambda: _platform_data_dir())
     verbose: bool = False
     no_color: bool = False
     http: HttpConfig = field(default_factory=HttpConfig)
     download: DownloadConfig = field(default_factory=DownloadConfig)
+    catalog: CatalogConfig = field(default_factory=CatalogConfig)
     config_path: Path | None = None
 
 
-_ROOT_KEYS = frozenset({"data_dir", "verbose", "no_color", "http", "download"})
+_ROOT_KEYS = frozenset({"data_dir", "verbose", "no_color", "http", "download", "catalog"})
 _HTTP_KEYS = frozenset({"request_timeout", "connect_timeout", "max_retries", "retry_backoff_base"})
 _DOWNLOAD_KEYS = frozenset({"read_timeout", "connect_timeout"})
+_CATALOG_KEYS = frozenset({"mode", "manifest_url", "backup_count", "allow_insecure_http"})
 
 
 def load_config(
@@ -84,6 +95,9 @@ def load_config(
             download_raw, "connect_timeout", default.download.connect_timeout
         ),
     )
+    catalog_raw = _section(raw, "catalog")
+    _reject_unknown(catalog_raw, _CATALOG_KEYS, "catalog")
+    catalog = _catalog_config(catalog_raw)
 
     return AppConfig(
         data_dir=(
@@ -97,6 +111,7 @@ def load_config(
         no_color=no_color if no_color is not None else file_no_color,
         http=http,
         download=download,
+        catalog=catalog,
         config_path=loaded_config_path,
     )
 
@@ -135,6 +150,54 @@ def _platform_data_dir() -> Path:
     data_home = os.environ.get("XDG_DATA_HOME")
     base = Path(data_home) if data_home and data_home.strip() else Path.home() / ".local" / "share"
     return base / "firmatlas"
+
+
+def _catalog_config(values: dict[str, Any]) -> CatalogConfig:
+    mode = values.get("mode", "standalone")
+    if not isinstance(mode, str) or mode not in {"standalone", "managed"}:
+        raise ConfigError("配置项 catalog.mode 只能是 standalone 或 managed。")
+
+    manifest_url = values.get("manifest_url")
+    if manifest_url is not None:
+        if not isinstance(manifest_url, str) or not manifest_url.strip():
+            raise ConfigError("配置项 catalog.manifest_url 必须是非空 URL。")
+        manifest_url = manifest_url.strip()
+
+    backup_count = values.get("backup_count", 2)
+    if isinstance(backup_count, bool) or not isinstance(backup_count, int):
+        raise ConfigError("配置项 catalog.backup_count 必须是整数。")
+    if not 1 <= backup_count <= 10:
+        raise ConfigError("配置项 catalog.backup_count 必须在 1 到 10 之间。")
+
+    allow_insecure_http = values.get("allow_insecure_http", False)
+    if not isinstance(allow_insecure_http, bool):
+        raise ConfigError("配置项 catalog.allow_insecure_http 必须是布尔值。")
+
+    if mode == "managed" and manifest_url is None:
+        raise ConfigError("Managed 模式必须配置 catalog.manifest_url。")
+    if manifest_url is not None:
+        _validate_manifest_url(manifest_url, allow_insecure_http)
+
+    return CatalogConfig(
+        mode=mode,
+        manifest_url=manifest_url,
+        backup_count=backup_count,
+        allow_insecure_http=allow_insecure_http,
+    )
+
+
+def _validate_manifest_url(manifest_url: str, allow_insecure_http: bool) -> None:
+    parsed = urlsplit(manifest_url)
+    if parsed.scheme not in {"http", "https", "file"}:
+        raise ConfigError("配置项 catalog.manifest_url 只允许使用 http、https 或 file 协议。")
+    if parsed.scheme in {"http", "https"} and not parsed.netloc:
+        raise ConfigError("配置项 catalog.manifest_url 不是有效的 HTTP URL。")
+    if parsed.scheme == "file" and not parsed.path:
+        raise ConfigError("配置项 catalog.manifest_url 不是有效的 file URL。")
+    if parsed.scheme == "http" and not allow_insecure_http:
+        raise ConfigError(
+            "配置项 catalog.manifest_url 使用 http:// 时必须同时开启 catalog.allow_insecure_http。"
+        )
 
 
 def _load_toml(path: Path) -> dict[str, Any]:
