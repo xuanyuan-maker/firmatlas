@@ -165,6 +165,29 @@ def test_download_json_keeps_errors_on_stderr(seeded_cli):
     assert "missing-artifact" in result.stderr
 
 
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["sources", "--format", "json"],
+        ["list", "--format", "json"],
+        ["show", "missing-release", "--format", "json"],
+        ["downloads", "--format", "json"],
+        ["download", "missing-artifact", "--format", "json"],
+    ],
+)
+def test_query_json_failures_are_machine_readable(tmp_path, args):
+    result = CliRunner().invoke(cli, ["--data-dir", str(tmp_path / "missing"), *args])
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.stdout)
+    assert payload["schema_version"] == 1
+    assert payload["error_code"] in {
+        "database_not_initialized",
+        "release_not_found",
+    }
+    assert result.stderr == ""
+
+
 def test_download_receives_effective_timeout_config(seeded_cli, tmp_path):
     runner, data, artifact_id = seeded_cli
     config_path = tmp_path / "firmatlas.toml"

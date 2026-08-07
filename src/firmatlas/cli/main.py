@@ -10,6 +10,7 @@ import json
 from contextlib import AsyncExitStack
 from dataclasses import asdict
 from pathlib import Path
+from typing import NoReturn
 
 import click
 import sqlalchemy as sa
@@ -229,6 +230,11 @@ def catalog_update_command(
     try:
         if check_only:
             if replace:
+                if output_format == "json":
+                    _raise_json_failure(
+                        click.ClickException("catalog update --check 不需要 --replace。"),
+                        error_code="invalid_arguments",
+                    )
                 raise click.ClickException("catalog update --check 不需要 --replace。")
             report = check_catalog_update(data_dir=config.data_dir, config=config)
         else:
@@ -322,17 +328,22 @@ def _catalog_export_json(report: CatalogExportReport) -> dict[str, object]:
     }
 
 
-def _echo_json_error(error: BaseException) -> None:
+def _echo_json_error(error: BaseException, *, error_code: str | None = None) -> None:
     click.echo(
         json.dumps(
             {
                 "schema_version": OUTPUT_SCHEMA_VERSION,
-                "error_code": _error_code(error),
+                "error_code": error_code or _error_code(error),
                 "error": str(error),
             },
             ensure_ascii=False,
         )
     )
+
+
+def _raise_json_failure(error: BaseException, *, error_code: str | None = None) -> NoReturn:
+    _echo_json_error(error, error_code=error_code)
+    raise SystemExit(1) from None
 
 
 @cli.command(name="init")
@@ -434,6 +445,8 @@ def sources_command(ctx: click.Context, output_format: str) -> None:
     try:
         engine = _open_database_with_recovery(data_dir)
     except FirmAtlasError as exc:
+        if output_format == "json":
+            _raise_json_failure(exc)
         raise click.ClickException(str(exc)) from exc
     try:
         with SqliteUnitOfWorkFactory(engine).begin() as uow:
@@ -596,6 +609,8 @@ def list_command(
     try:
         engine = _open_database_with_recovery(data_dir)
     except FirmAtlasError as exc:
+        if output_format == "json":
+            _raise_json_failure(exc)
         raise click.ClickException(str(exc)) from exc
     try:
         page = SqliteCatalogQueryService(engine).list_firmware(catalog_filter)
@@ -653,6 +668,8 @@ def show_command(ctx: click.Context, release_id: str, output_format: str) -> Non
     try:
         engine = _open_database_with_recovery(data_dir)
     except FirmAtlasError as exc:
+        if output_format == "json":
+            _raise_json_failure(exc)
         raise click.ClickException(str(exc)) from exc
     try:
         service = SqliteCatalogQueryService(engine)
@@ -662,6 +679,14 @@ def show_command(ctx: click.Context, release_id: str, output_format: str) -> Non
             if len(matches) == 1:
                 detail = service.show_release(matches[0])
             elif len(matches) > 1:
+                if output_format == "json":
+                    _raise_json_failure(
+                        click.ClickException(
+                            f"ID 前缀 {release_id!r} 匹配到 {len(matches)} 条记录，"
+                            "请提供更长的前缀。"
+                        ),
+                        error_code="ambiguous_id",
+                    )
                 raise click.ClickException(
                     f"ID 前缀 {release_id!r} 匹配到 {len(matches)} 条记录，请提供更长的前缀。"
                 )
@@ -669,6 +694,11 @@ def show_command(ctx: click.Context, release_id: str, output_format: str) -> Non
         engine.dispose()
 
     if detail is None:
+        if output_format == "json":
+            _raise_json_failure(
+                click.ClickException(f"未找到发布 {release_id!r}。"),
+                error_code="release_not_found",
+            )
         raise click.ClickException(f"未找到发布 {release_id!r}。")
 
     if output_format == "json":
@@ -718,6 +748,8 @@ def download_command(ctx: click.Context, artifact_ids: tuple[str, ...], output_f
     try:
         engine = _open_database_with_recovery(data_dir)
     except FirmAtlasError as exc:
+        if output_format == "json":
+            _raise_json_failure(exc)
         raise click.ClickException(str(exc)) from exc
 
     uow_factory = SqliteUnitOfWorkFactory(engine)
@@ -914,6 +946,8 @@ def downloads_command(
     try:
         engine = _open_database_with_recovery(data_dir)
     except FirmAtlasError as exc:
+        if output_format == "json":
+            _raise_json_failure(exc)
         raise click.ClickException(str(exc)) from exc
     try:
         with SqliteUnitOfWorkFactory(engine).begin() as uow:
