@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import urllib.error
 import urllib.request
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import unquote, urljoin, urlsplit
 
@@ -63,25 +65,37 @@ def read_local_manifest(data_dir: Path) -> CatalogManifest | None:
 def _read_url(url: str, *, max_bytes: int, timeout: float) -> bytes:
     if max_bytes <= 0:
         raise CatalogSourceError("manifest 最大读取大小必须大于 0。")
-    parsed = urlsplit(url)
-    if parsed.scheme == "file":
-        if parsed.netloc not in {"", "localhost"}:
-            raise CatalogSourceError("file:// manifest 不允许访问远程主机。")
-        path = Path(unquote(parsed.path))
-        try:
-            with path.open("rb") as handle:
-                return _read_limited(handle, max_bytes)
-        except OSError as exc:
-            raise CatalogSourceError(f"无法读取本地 manifest 文件 {path}：{exc}") from exc
-
-    request = urllib.request.Request(url, headers={"Accept": "application/json"})
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with open_catalog_url(url, allow_insecure_http=True, timeout=timeout) as response:
             return _read_limited(response, max_bytes)
     except urllib.error.HTTPError as exc:
         raise CatalogSourceError(f"读取 Catalog manifest 返回 HTTP {exc.code}。") from exc
     except urllib.error.URLError as exc:
         raise CatalogSourceError(f"Catalog manifest 网络请求失败：{exc.reason}") from exc
+
+
+@contextmanager
+def open_catalog_url(url: str, *, allow_insecure_http: bool, timeout: float) -> Iterator:
+    """打开受协议限制的 Catalog 文件或 HTTP 来源。"""
+    _validate_source_url(url, allow_insecure_http)
+    parsed = urlsplit(url)
+    if parsed.scheme == "file":
+        path = Path(unquote(parsed.path))
+        try:
+            with path.open("rb") as handle:
+                yield handle
+        except OSError as exc:
+            raise CatalogSourceError(f"无法读取本地 Catalog 文件 {path}：{exc}") from exc
+        return
+
+    request = urllib.request.Request(url, headers={"Accept": "application/octet-stream"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            yield response
+    except urllib.error.HTTPError as exc:
+        raise CatalogSourceError(f"读取 Catalog 来源返回 HTTP {exc.code}。") from exc
+    except urllib.error.URLError as exc:
+        raise CatalogSourceError(f"Catalog 来源网络请求失败：{exc.reason}") from exc
 
 
 def _read_limited(handle, max_bytes: int) -> bytes:

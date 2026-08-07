@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,6 +24,35 @@ class DownloadedDatabase:
     uncompressed_size: int
     compressed_sha256: str
     database_sha256: str
+
+
+@dataclass(frozen=True)
+class DownloadMigration:
+    migrated_records: int
+    warnings: tuple[str, ...]
+
+
+_DOWNLOAD_COLUMNS = (
+    "id",
+    "artifact_id",
+    "status",
+    "verification_status",
+    "requested_at",
+    "started_at",
+    "finished_at",
+    "resolved_url",
+    "url_refresh_count",
+    "temporary_relative_path",
+    "final_relative_path",
+    "bytes_received",
+    "size_bytes",
+    "sha256",
+    "attempt_count",
+    "http_etag",
+    "http_last_modified",
+    "error_code",
+    "error_message",
+)
 
 
 def download_and_extract_database(
@@ -119,3 +149,89 @@ def _unlink_if_exists(path: Path) -> None:
         path.unlink(missing_ok=True)
     except OSError:
         pass
+
+
+def migrate_download_records(
+    *, candidate_path: Path, old_path: Path | None, data_dir: Path
+) -> DownloadMigration:
+    """在候选库中迁移旧库下载记录，并验证 Artifact 身份。"""
+    if old_path is None or not old_path.exists():
+        return DownloadMigration(migrated_records=0, warnings=())
+    columns = ", ".join(_DOWNLOAD_COLUMNS)
+    try:
+        with sqlite3.connect(candidate_path) as connection:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute("ATTACH DATABASE ? AS old_db", (str(old_path),))
+            try:
+                missing = connection.execute(
+                    """
+                    SELECT d.artifact_id
+                    FROM old_db.download_records AS d
+                    LEFT JOIN main.firmware_artifacts AS a ON a.id = d.artifact_id
+                    WHERE a.id IS NULL
+                    LIMIT 1
+                    """
+                ).fetchone()
+                if missing is not None:
+                    raise CatalogUpdateError(
+                        f"旧下载记录引用的 Artifact {missing[0]} 不存在于候选目录，已中止更新。"
+                    )
+                count = connection.execute(
+                    "SELECT COUNT(*) FROM old_db.download_records"
+                ).fetchone()[0]
+                if count:
+                    connection.execute(
+                        f"INSERT INTO main.download_records ({columns}) "
+                        f"SELECT {columns} FROM old_db.download_records"
+                    )
+                    connection.commit()
+                warnings = _completed_download_warnings(connection, data_dir)
+            finally:
+                connection.execute("DETACH DATABASE old_db")
+    except CatalogUpdateError:
+        raise
+    except sqlite3.Error as exc:
+        raise CatalogUpdateError(f"迁移旧下载记录失败：{exc}") from exc
+    return DownloadMigration(migrated_records=count, warnings=warnings)
+
+
+def _completed_download_warnings(connection: sqlite3.Connection, data_dir: Path) -> tuple[str, ...]:
+    rows = connection.execute(
+        """
+        SELECT id, final_relative_path
+        FROM old_db.download_records
+        WHERE status = 'completed'
+        """
+    ).fetchall()
+    warnings: list[str] = []
+    root = data_dir.resolve()
+    for record_id, relative_path in rows:
+        if not relative_path:
+            warnings.append(f"下载记录 {record_id} 缺少 final_relative_path。")
+            continue
+        final_path = (data_dir / relative_path).resolve()
+        if root not in final_path.parents:
+            warnings.append(f"下载记录 {record_id} 的 final_relative_path 超出数据目录。")
+        elif not final_path.is_file():
+            warnings.append(f"下载记录 {record_id} 的固件文件不存在：{relative_path}。")
+    return tuple(warnings)
+
+
+def verify_updated_database(database_path: Path, expected_downloads: int) -> None:
+    """验证迁移后的候选库仍完整且下载记录数量正确。"""
+    try:
+        with sqlite3.connect(database_path) as connection:
+            integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
+            if integrity != "ok":
+                raise CatalogUpdateError(f"更新后 SQLite integrity_check 失败：{integrity}")
+            if connection.execute("PRAGMA foreign_key_check").fetchall():
+                raise CatalogUpdateError("更新后 SQLite foreign_key_check 发现错误。")
+            actual = connection.execute("SELECT COUNT(*) FROM download_records").fetchone()[0]
+            if actual != expected_downloads:
+                raise CatalogUpdateError(
+                    f"更新后下载记录数量 {actual} 与预期 {expected_downloads} 不一致。"
+                )
+    except CatalogUpdateError:
+        raise
+    except sqlite3.Error as exc:
+        raise CatalogUpdateError(f"无法验证更新后的候选数据库：{exc}") from exc

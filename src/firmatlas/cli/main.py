@@ -18,7 +18,12 @@ from firmatlas import __version__
 from firmatlas.app import registry
 from firmatlas.app.catalog_export import CatalogExportReport, export_catalog
 from firmatlas.app.catalog_status import CatalogStatusReport, get_catalog_status
-from firmatlas.app.catalog_update import CatalogCheckReport, check_catalog_update
+from firmatlas.app.catalog_update import (
+    CatalogCheckReport,
+    CatalogUpdateReport,
+    check_catalog_update,
+    update_catalog,
+)
 from firmatlas.app.config import AppConfig, load_config
 from firmatlas.app.crawl import CrawlReport, crawl_source
 from firmatlas.app.download import DownloadReport, download_artifact
@@ -213,22 +218,22 @@ def catalog_status_command(ctx: click.Context, output_format: str) -> None:
 def catalog_update_command(
     ctx: click.Context, check_only: bool, replace: bool, output_format: str
 ) -> None:
-    """检查或更新 Managed Catalog（更新下载流程随后实现）。"""
-    if not check_only:
-        raise click.ClickException(
-            "Catalog 更新下载流程尚未执行；当前只支持 catalog update --check。"
-        )
-    if replace:
-        raise click.ClickException("catalog update --check 不需要 --replace。")
+    """检查或更新 Managed Catalog。"""
     config: AppConfig = ctx.obj["config"]
     try:
-        report = check_catalog_update(data_dir=config.data_dir, config=config)
+        if check_only:
+            if replace:
+                raise click.ClickException("catalog update --check 不需要 --replace。")
+            report = check_catalog_update(data_dir=config.data_dir, config=config)
+        else:
+            report = update_catalog(data_dir=config.data_dir, config=config, replace=replace)
     except FirmAtlasError as exc:
         raise click.ClickException(str(exc)) from exc
     if output_format == "json":
-        click.echo(json.dumps(_catalog_check_json(report), ensure_ascii=False, indent=2))
+        payload = _catalog_check_json(report) if check_only else _catalog_update_json(report)
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
-        _echo_catalog_check(report)
+        _echo_catalog_check(report) if check_only else _echo_catalog_update(report)
 
 
 def _catalog_status_json(report: CatalogStatusReport) -> dict[str, object]:
@@ -257,6 +262,19 @@ def _catalog_check_json(report: CatalogCheckReport) -> dict[str, object]:
     }
 
 
+def _catalog_update_json(report: CatalogUpdateReport) -> dict[str, object]:
+    return {
+        "schema_version": OUTPUT_SCHEMA_VERSION,
+        "status": report.status,
+        "current_catalog_version": report.current_catalog_version,
+        "catalog_version": report.catalog_version,
+        "lineage_id": report.lineage_id,
+        "backup_path": str(report.backup_path) if report.backup_path else None,
+        "migrated_downloads": report.migrated_downloads,
+        "warnings": list(report.warnings),
+    }
+
+
 def _echo_catalog_check(report: CatalogCheckReport) -> None:
     current = report.current_catalog_version or "未安装"
     state = "有更新" if report.update_available else "无需更新"
@@ -267,6 +285,20 @@ def _echo_catalog_check(report: CatalogCheckReport) -> None:
     click.echo(f"状态：{state}")
     click.echo(f"当前 lineage：{report.current_lineage_id or '未安装'}")
     click.echo(f"远程 lineage：{report.remote_lineage_id}")
+
+
+def _echo_catalog_update(report: CatalogUpdateReport) -> None:
+    state = {"updated": "更新完成", "replaced": "替换完成", "up_to_date": "无需更新"}.get(
+        report.status, report.status
+    )
+    click.echo(f"状态：{state}")
+    click.echo(f"版本：{report.current_catalog_version or '未安装'} → {report.catalog_version}")
+    click.echo(f"lineage：{report.lineage_id}")
+    click.echo(f"迁移下载记录：{report.migrated_downloads}")
+    if report.backup_path:
+        click.echo(f"备份：{report.backup_path}")
+    for warning in report.warnings:
+        click.echo(f"警告：{warning}", err=True)
 
 
 def _catalog_export_json(report: CatalogExportReport) -> dict[str, object]:

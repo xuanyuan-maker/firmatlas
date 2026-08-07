@@ -57,14 +57,17 @@ manifest_url = "{(remote / "manifest.json").as_uri()}"
     assert payload["replace_required"] is True
 
 
-def test_catalog_update_without_check_is_not_yet_allowed(tmp_path):
+def test_catalog_update_without_replace_rejects_first_install(tmp_path):
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    (remote / "manifest.json").write_text(make_manifest().to_json(), encoding="utf-8")
     config_path = tmp_path / "managed.toml"
     config_path.write_text(
         f"""
 data_dir = "{tmp_path / "data"}"
 [catalog]
 mode = "managed"
-manifest_url = "file:///tmp/manifest.json"
+manifest_url = "{(remote / "manifest.json").as_uri()}"
 """.strip(),
         encoding="utf-8",
     )
@@ -72,4 +75,41 @@ manifest_url = "file:///tmp/manifest.json"
     result = CliRunner().invoke(cli, ["--config", str(config_path), "catalog", "update"])
 
     assert result.exit_code != 0
-    assert "尚未执行" in result.output
+    assert "首次安装必须使用 --replace" in result.output
+
+
+def test_catalog_update_replace_json(tmp_path):
+    runner = CliRunner()
+    server_data = tmp_path / "server"
+    client_data = tmp_path / "client"
+    release_dir = tmp_path / "release"
+    server_init = runner.invoke(cli, ["--data-dir", str(server_data), "init"])
+    assert server_init.exit_code == 0, server_init.output
+    export = runner.invoke(
+        cli,
+        ["--data-dir", str(server_data), "catalog", "export", "--output", str(release_dir)],
+    )
+    assert export.exit_code == 0, export.output
+    client_init = runner.invoke(cli, ["--data-dir", str(client_data), "init"])
+    assert client_init.exit_code == 0, client_init.output
+    config_path = tmp_path / "managed.toml"
+    config_path.write_text(
+        f"""
+data_dir = "{client_data}"
+[catalog]
+mode = "managed"
+manifest_url = "{(release_dir / "manifest.json").as_uri()}"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        cli,
+        ["--config", str(config_path), "catalog", "update", "--replace", "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["status"] == "replaced"
+    assert payload["migrated_downloads"] == 0
+    assert payload["backup_path"] is not None
