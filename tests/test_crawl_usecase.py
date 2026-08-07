@@ -85,9 +85,7 @@ def test_recrawl_is_idempotent_and_counts_updates(
     product = make_product_candidate()
     run_crawl(FakeAdapter([DiscoveredProduct(product=product), completed()]), uow_factory)
 
-    report = run_crawl(
-        FakeAdapter([DiscoveredProduct(product=product), completed()]), uow_factory
-    )
+    report = run_crawl(FakeAdapter([DiscoveredProduct(product=product), completed()]), uow_factory)
 
     assert report.status is CrawlRunStatus.COMPLETED
     assert report.stats.items_added == 0
@@ -110,9 +108,7 @@ def test_complete_crawl_marks_unseen_as_disappeared(
 
     # 直接查表验证落库状态（验证辅助，不属于业务层访问路径）
     with engine.connect() as conn:
-        status = conn.execute(
-            sa.select(schema.firmware_releases.c.visibility_status)
-        ).scalar_one()
+        status = conn.execute(sa.select(schema.firmware_releases.c.visibility_status)).scalar_one()
     assert status == VisibilityStatus.DISAPPEARED
 
 
@@ -124,15 +120,11 @@ def test_reappeared_release_restored_to_active(
     run_crawl(FakeAdapter([DiscoveredProduct(product=product), completed()]), uow_factory)
     run_crawl(FakeAdapter([completed()]), uow_factory)  # 消失
 
-    report = run_crawl(
-        FakeAdapter([DiscoveredProduct(product=product), completed()]), uow_factory
-    )
+    report = run_crawl(FakeAdapter([DiscoveredProduct(product=product), completed()]), uow_factory)
 
     assert report.status is CrawlRunStatus.COMPLETED
     with engine.connect() as conn:
-        status = conn.execute(
-            sa.select(schema.firmware_releases.c.visibility_status)
-        ).scalar_one()
+        status = conn.execute(sa.select(schema.firmware_releases.c.visibility_status)).scalar_one()
     assert status == VisibilityStatus.ACTIVE
 
 

@@ -120,9 +120,7 @@ class UniviewGlobalAdapter:
         if not all_rows:
             yield DiscoveryCompleted(
                 is_complete=(cat_failure_count == 0),
-                incomplete_reason=(
-                    "所有分类均无产品数据" if cat_failure_count == 0 else None
-                ),
+                incomplete_reason=("所有分类均无产品数据" if cat_failure_count == 0 else None),
                 issues=tuple(cat_issues),
             )
             return
@@ -148,9 +146,7 @@ class UniviewGlobalAdapter:
         # 产出完成事件
         yield DiscoveryCompleted(
             is_complete=(cat_failure_count == 0 and product_failures == 0),
-            incomplete_reason=_compose_incomplete_reason(
-                cat_failure_count, product_failures
-            ),
+            incomplete_reason=_compose_incomplete_reason(cat_failure_count, product_failures),
             issues=tuple(cat_issues),
         )
 
@@ -189,9 +185,7 @@ class _ProductRow:
         self.category_url = category_url
 
 
-def _parse_product_rows(
-    html: str, category_name: str, category_url: str
-) -> list[_ProductRow]:
+def _parse_product_rows(html: str, category_name: str, category_url: str) -> list[_ProductRow]:
     """从分类页 HTML 中解析所有产品固件行。
 
     目标结构:
@@ -206,9 +200,7 @@ def _parse_product_rows(
 
     for box_html in boxes:
         # 提取 onclick 属性中的 downFile 参数
-        onclick_match = re.search(
-            r"onclick=\"downFile\('([^']*)',\s*'([^']*)'\);?\"", box_html
-        )
+        onclick_match = re.search(r"onclick=\"downFile\('([^']*)',\s*'([^']*)'\);?\"", box_html)
         if not onclick_match:
             continue
 
@@ -216,9 +208,7 @@ def _parse_product_rows(
         filename = onclick_match.group(2)
 
         # 提取模型名（<a> 标签文本内容）
-        model_match = re.search(
-            r"<a[^>]*onclick=\"downFile[^>]*>([^<]+)</a>", box_html
-        )
+        model_match = re.search(r"<a[^>]*onclick=\"downFile[^>]*>([^<]+)</a>", box_html)
         if not model_match:
             continue
         model = model_match.group(1).strip()
@@ -362,9 +352,7 @@ def _safe_key_part(s: str) -> str:
     return s.replace(" ", "_").replace("(", "").replace(")", "")
 
 
-def _compose_incomplete_reason(
-    cat_failures: int, product_failures: int
-) -> str | None:
+def _compose_incomplete_reason(cat_failures: int, product_failures: int) -> str | None:
     parts: list[str] = []
     if cat_failures:
         parts.append(f"{cat_failures} 个分类页面获取失败")

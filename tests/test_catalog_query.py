@@ -74,8 +74,12 @@ def make_two_products(make_product_candidate, make_revision_candidate, make_rele
 
 
 def test_list_returns_all_without_filter(
-    engine, uow_factory, seeded_source,
-    make_product_candidate, make_revision_candidate, make_release_candidate,
+    engine,
+    uow_factory,
+    seeded_source,
+    make_product_candidate,
+    make_revision_candidate,
+    make_release_candidate,
 ):
     crawl_products(
         uow_factory,
@@ -94,8 +98,12 @@ def test_list_returns_all_without_filter(
 
 
 def test_list_combined_filters(
-    engine, uow_factory, seeded_source,
-    make_product_candidate, make_revision_candidate, make_release_candidate,
+    engine,
+    uow_factory,
+    seeded_source,
+    make_product_candidate,
+    make_revision_candidate,
+    make_release_candidate,
 ):
     crawl_products(
         uow_factory,
@@ -104,9 +112,7 @@ def test_list_combined_filters(
     service = SqliteCatalogQueryService(engine)
 
     # 类型 + 型号包含匹配（大小写不敏感）
-    page = service.list_firmware(
-        CatalogFilter(type=ProductType.CAMERA, model="ipc44")
-    )
+    page = service.list_firmware(CatalogFilter(type=ProductType.CAMERA, model="ipc44"))
     assert page.total == 1
     assert page.rows[0].model == "TL-IPC44AW"
 
@@ -115,9 +121,7 @@ def test_list_combined_filters(
     assert page.total == 0
 
     # source + region + hardware
-    page = service.list_firmware(
-        CatalogFilter(source="tp-link-cn", region="cn", hardware="v14")
-    )
+    page = service.list_firmware(CatalogFilter(source="tp-link-cn", region="cn", hardware="v14"))
     assert page.total == 1
     assert page.rows[0].model == "TL-WR841N"
 
@@ -127,8 +131,12 @@ def test_list_combined_filters(
 
 
 def test_list_pagination(
-    engine, uow_factory, seeded_source,
-    make_product_candidate, make_revision_candidate, make_release_candidate,
+    engine,
+    uow_factory,
+    seeded_source,
+    make_product_candidate,
+    make_revision_candidate,
+    make_release_candidate,
 ):
     crawl_products(
         uow_factory,
@@ -146,9 +154,7 @@ def test_list_pagination(
     assert page.rows[0].release_id != first_id
 
 
-def test_like_wildcards_are_literal(
-    engine, uow_factory, seeded_source, make_product_candidate
-):
+def test_like_wildcards_are_literal(engine, uow_factory, seeded_source, make_product_candidate):
     crawl_products(uow_factory, [make_product_candidate()])
     service = SqliteCatalogQueryService(engine)
 
@@ -157,9 +163,7 @@ def test_like_wildcards_are_literal(
     assert service.list_firmware(CatalogFilter(model="wr_841")).total == 0
 
 
-def test_show_release_detail(
-    engine, uow_factory, seeded_source, make_product_candidate
-):
+def test_show_release_detail(engine, uow_factory, seeded_source, make_product_candidate):
     crawl_products(uow_factory, [make_product_candidate()])
     service = SqliteCatalogQueryService(engine)
     release_id = service.list_firmware(CatalogFilter()).rows[0].release_id
@@ -178,9 +182,7 @@ def test_show_release_detail(
     assert service.show_release("no-such-id") is None
 
 
-def test_find_release_ids_by_prefix(
-    engine, uow_factory, seeded_source, make_product_candidate
-):
+def test_find_release_ids_by_prefix(engine, uow_factory, seeded_source, make_product_candidate):
     crawl_products(uow_factory, [make_product_candidate()])
     service = SqliteCatalogQueryService(engine)
     release_id = service.list_firmware(CatalogFilter()).rows[0].release_id
@@ -203,7 +205,9 @@ def crawl_via_cli(runner, data, monkeypatch, products):
 
     events = [DiscoveredProduct(product=p) for p in products]
     events.append(DiscoveryCompleted(is_complete=True, incomplete_reason=None, issues=()))
-    monkeypatch.setattr(registry, "build_adapter", lambda key, http, data_dir=None: FakeAdapter(events))
+    monkeypatch.setattr(
+        registry, "build_adapter", lambda key, http, data_dir=None: FakeAdapter(events)
+    )
     monkeypatch.delenv("all_proxy", raising=False)
     monkeypatch.delenv("ALL_PROXY", raising=False)
     result = runner.invoke(cli, ["--data-dir", data, "crawl", "tp-link-cn"])
@@ -230,9 +234,7 @@ def test_cli_list_json_schema_and_no_ansi(tmp_path, monkeypatch, make_product_ca
     runner.invoke(cli, ["--data-dir", data, "init"])
     crawl_via_cli(runner, data, monkeypatch, [make_product_candidate()])
 
-    result = runner.invoke(
-        cli, ["--data-dir", data, "list", "--format", "json"], color=True
-    )
+    result = runner.invoke(cli, ["--data-dir", data, "list", "--format", "json"], color=True)
     assert result.exit_code == 0, result.output
 
     # 纯 JSON：可整体解析、含 schema_version、无 ANSI 转义（AC-23）
@@ -248,9 +250,7 @@ def test_cli_show_by_prefix_and_json(tmp_path, monkeypatch, make_product_candida
     runner.invoke(cli, ["--data-dir", data, "init"])
     crawl_via_cli(runner, data, monkeypatch, [make_product_candidate()])
 
-    listed = json.loads(
-        runner.invoke(cli, ["--data-dir", data, "list", "--format", "json"]).output
-    )
+    listed = json.loads(runner.invoke(cli, ["--data-dir", data, "list", "--format", "json"]).output)
     release_id = listed["rows"][0]["release_id"]
 
     # 短前缀（list 表格显示前 8 位）
@@ -259,9 +259,7 @@ def test_cli_show_by_prefix_and_json(tmp_path, monkeypatch, make_product_candida
     assert "TL-WR841N" in result.output
     assert "Artifact" in result.output
 
-    result = runner.invoke(
-        cli, ["--data-dir", data, "show", release_id, "--format", "json"]
-    )
+    result = runner.invoke(cli, ["--data-dir", data, "show", release_id, "--format", "json"])
     payload = json.loads(result.output)
     assert payload["schema_version"] == 1
     assert payload["release"]["model"] == "TL-WR841N"

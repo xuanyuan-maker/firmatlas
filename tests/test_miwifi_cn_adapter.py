@@ -20,7 +20,7 @@ from firmatlas.adapters.miwifi_cn.adapter import (
     _type_codes_for_entry,
 )
 from firmatlas.domain.model import ProductType
-from firmatlas.infra.http_client import FetchError, FetchedText
+from firmatlas.infra.http_client import FetchedText, FetchError
 
 _INDEX_URL = "https://www1.miwifi.com/statics/json/index.json"
 _API_BASE = "https://api.miwifi.com/upgrade/log/latest"
@@ -205,15 +205,11 @@ class TestTypeCodesForEntry:
     """根据 downloadList 条目生成 API typeList 码。"""
 
     def test_stable_only(self) -> None:
-        codes = _type_codes_for_entry(
-            {"model": "RP04", "name": "Xiaomi Router BE10000 Pro 稳定版"}
-        )
+        codes = _type_codes_for_entry({"model": "RP04", "name": "Xiaomi Router BE10000 Pro 稳定版"})
         assert codes == ["RP04STA"]
 
     def test_dev_variant(self) -> None:
-        codes = _type_codes_for_entry(
-            {"model": "RA70", "name": "Xiaomi Router AX9000 开发版"}
-        )
+        codes = _type_codes_for_entry({"model": "RA70", "name": "Xiaomi Router AX9000 开发版"})
         assert codes == ["RA70STA", "RA70DEV"]
 
     def test_empty_model(self) -> None:
@@ -229,9 +225,7 @@ class TestParseJsonp:
         assert result["code"] == 0
 
     def test_jsonp_wrapped(self) -> None:
-        result = _parse_jsonp(
-            'jQuery123456789({"code": 0, "data": {"list": [{"x": 1}]}});'
-        )
+        result = _parse_jsonp('jQuery123456789({"code": 0, "data": {"list": [{"x": 1}]}});')
         assert result is not None
         assert result["code"] == 0
 

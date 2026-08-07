@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
@@ -130,9 +130,7 @@ class MiwifiCnAdapter:
 
         yield DiscoveryCompleted(
             is_complete=(api_failures == 0),
-            incomplete_reason=(
-                f"{api_failures} 个产品 API 请求失败" if api_failures else None
-            ),
+            incomplete_reason=(f"{api_failures} 个产品 API 请求失败" if api_failures else None),
             issues=tuple(issues),
         )
 
@@ -341,9 +339,7 @@ class _ProductBuilder:
         release_date = None
         if isinstance(ts, (int, float)) and ts > 0:
             try:
-                release_date = datetime.fromtimestamp(
-                    ts / 1000, tz=timezone.utc
-                ).date()
+                release_date = datetime.fromtimestamp(ts / 1000, tz=UTC).date()
             except (OSError, ValueError):
                 pass
 

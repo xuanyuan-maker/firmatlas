@@ -76,7 +76,11 @@ class CatalogRepository(Protocol):
         ...
 
     def upsert_artifact(
-        self, *, release_id: str, candidate: FirmwareArtifactCandidate, run_id: str,
+        self,
+        *,
+        release_id: str,
+        candidate: FirmwareArtifactCandidate,
+        run_id: str,
         seen_at: datetime,
     ) -> UpsertResult:
         """同 upsert_release；download_url 变化时刷新 url_last_resolved_at。"""

@@ -82,13 +82,9 @@ class _MockHttpFetcher:
         # Firmware downloads
         if url.startswith(_DOWNLOAD_BASE):
             if "linkProductOrClass=757594406256709" in url:
-                return FetchedJson(
-                    url=url, status_code=200, data=_load("firmware-be12pro.json")
-                )
+                return FetchedJson(url=url, status_code=200, data=_load("firmware-be12pro.json"))
             elif "linkProductOrClass=941" in url:
-                return FetchedJson(
-                    url=url, status_code=200, data=_load("firmware-re6lpro.json")
-                )
+                return FetchedJson(url=url, status_code=200, data=_load("firmware-re6lpro.json"))
             elif "linkProductOrClass=683497529253957" in url:
                 return FetchedJson(url=url, status_code=200, data=_load("firmware-i36.json"))
             elif "linkProductOrClass=791" in url:
@@ -131,9 +127,12 @@ class TestFilenameFromUrl:
     """URL 文件名提取。"""
 
     def test_basic_url(self) -> None:
-        assert _filename_from_url(
-            "https://static.tenda.com.cn/document/2026/05/28/abc/US_BE12ProV1.0mt_V16.03.66.23_TD01.zip"
-        ) == "US_BE12ProV1.0mt_V16.03.66.23_TD01.zip"
+        assert (
+            _filename_from_url(
+                "https://static.tenda.com.cn/document/2026/05/28/abc/US_BE12ProV1.0mt_V16.03.66.23_TD01.zip"
+            )
+            == "US_BE12ProV1.0mt_V16.03.66.23_TD01.zip"
+        )
 
     def test_url_with_query(self) -> None:
         assert _filename_from_url("https://example.com/firmware.zip?token=123") == "firmware.zip"

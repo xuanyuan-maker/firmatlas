@@ -18,9 +18,9 @@ from firmatlas.domain.model import OfficialChecksum
 class SkipReason(StrEnum):
     """跳过原因的稳定枚举。"""
 
-    UNMAPPED_TYPE = "unmapped_type"        # classify() 返回 None，产品类型不在采集范围
-    PARSE_FAILED = "parse_failed"           # 标题解析失败
-    MISSING_IDENTITY = "missing_identity"   # 缺少生成 source_key 的必要信息
+    UNMAPPED_TYPE = "unmapped_type"  # classify() 返回 None，产品类型不在采集范围
+    PARSE_FAILED = "parse_failed"  # 标题解析失败
+    MISSING_IDENTITY = "missing_identity"  # 缺少生成 source_key 的必要信息
 
 
 @dataclass(frozen=True)
@@ -37,11 +37,11 @@ class SkippedCandidate:
     用例聚合这些记录写入 CrawlRun.issues 和完整性报告（AC-08）。
     """
 
-    stage: str                     # "product" / "artifact"（tp-link-cn 在 artifact 级跳过）
+    stage: str  # "product" / "artifact"（tp-link-cn 在 artifact 级跳过）
     reason_code: SkipReason
-    detail: str                    # 人类可读说明
+    detail: str  # 人类可读说明
     source_url: str | None
-    raw_hint: str | None           # 定位用原始片段（如 API 记录 id）
+    raw_hint: str | None  # 定位用原始片段（如 API 记录 id）
 
 
 @dataclass(frozen=True)
@@ -78,9 +78,9 @@ type DiscoveryEvent = DiscoveredProduct | SkippedCandidate | DiscoveryCompleted
 class RefreshFailureReason(StrEnum):
     """地址刷新失败原因的稳定枚举。"""
 
-    NOT_FOUND = "not_found"                 # 来源已找不到该 Artifact（可能已下架）
+    NOT_FOUND = "not_found"  # 来源已找不到该 Artifact（可能已下架）
     IDENTITY_CONFLICT = "identity_conflict"  # 找到的记录 source_key 与请求不一致
-    SOURCE_ERROR = "source_error"            # 来源访问失败（网络/HTTP 错误）
+    SOURCE_ERROR = "source_error"  # 来源访问失败（网络/HTTP 错误）
 
 
 @dataclass(frozen=True)

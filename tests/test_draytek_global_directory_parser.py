@@ -3,7 +3,6 @@
 from pathlib import Path
 
 from firmatlas.adapters.draytek_global.directory_parser import (
-    DirectoryEntry,
     parse_directory_listing,
 )
 

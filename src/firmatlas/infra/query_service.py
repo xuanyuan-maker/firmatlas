@@ -99,9 +99,7 @@ class SqliteCatalogQueryService:
                     hardware=row.normalized_revision,
                     version=row.version_raw,
                     version_normalized=row.version_normalized,
-                    release_date=date.fromisoformat(row.release_date)
-                    if row.release_date
-                    else None,
+                    release_date=date.fromisoformat(row.release_date) if row.release_date else None,
                     visibility=VisibilityStatus(row.visibility_status),
                     artifact_count=row.artifact_count,
                     last_seen_at=parse_rfc3339(row.last_seen_at),
@@ -232,9 +230,7 @@ class SqliteCatalogQueryService:
             artifacts=artifacts,
         )
 
-    def _load_artifacts(
-        self, conn: sa.Connection, release_id: str
-    ) -> tuple[ArtifactDetail, ...]:
+    def _load_artifacts(self, conn: sa.Connection, release_id: str) -> tuple[ArtifactDetail, ...]:
         rows = conn.execute(
             sa.select(_A).where(_A.c.release_id == release_id).order_by(_A.c.source_key)
         ).all()

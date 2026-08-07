@@ -45,8 +45,11 @@ from firmatlas.adapters.tplink_cn.title_parser import (
     ],
 )
 def test_standard_titles(
-    title: str, expected_model: str, expected_hw: str,
-    expected_fw: str, expected_date: date,
+    title: str,
+    expected_model: str,
+    expected_hw: str,
+    expected_fw: str,
+    expected_date: date,
 ) -> None:
     result = parse_title(title)
     assert result is not None
@@ -110,7 +113,7 @@ def test_long_model_name() -> None:
         "   ",
         "不是升级软件的标题",
         "TL-R5009PE-AC 升级软件20260108_1.0.30",  # 缺少 V 前缀
-        "TL-R5009PE-AC V1.0升级软件_1.0.30",       # 缺少日期
+        "TL-R5009PE-AC V1.0升级软件_1.0.30",  # 缺少日期
     ],
 )
 def test_invalid_titles_return_none(bad_title: str) -> None:

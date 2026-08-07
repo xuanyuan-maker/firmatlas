@@ -91,9 +91,7 @@ def test_e2e_us_crawl_to_query(engine, uow_factory, seeded_us_source):
     assert detail is not None
     assert detail.source_key == "tp-link-us"
     assert detail.artifacts
-    assert all(
-        a.download_url.startswith("https://static.tp-link.com/") for a in detail.artifacts
-    )
+    assert all(a.download_url.startswith("https://static.tp-link.com/") for a in detail.artifacts)
 
 
 def test_e2e_us_recrawl_idempotent(engine, uow_factory, seeded_us_source):
@@ -116,9 +114,18 @@ def test_e2e_us_recrawl_idempotent(engine, uow_factory, seeded_us_source):
 
 def test_e2e_us_cli_full_flow(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        registry, "build_adapter", lambda key, http, data_dir=None: TplinkUsAdapter(FixtureHttpFetcher())
+        registry,
+        "build_adapter",
+        lambda key, http, data_dir=None: TplinkUsAdapter(FixtureHttpFetcher()),
     )
-    for var in ("all_proxy", "ALL_PROXY", "http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY"):
+    for var in (
+        "all_proxy",
+        "ALL_PROXY",
+        "http_proxy",
+        "HTTP_PROXY",
+        "https_proxy",
+        "HTTPS_PROXY",
+    ):
         monkeypatch.delenv(var, raising=False)
 
     runner = CliRunner()

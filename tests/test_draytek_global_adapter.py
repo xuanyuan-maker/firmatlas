@@ -31,12 +31,8 @@ def _responses() -> dict[str, str]:
     return {
         ROOT_URL: _fixture("ftp-root.html"),
         # Vigor2767 产品
-        "https://fw.draytek.com.tw/Vigor2767/Firmware/": _fixture(
-            "firmware-vigor2767.html"
-        ),
-        "https://fw.draytek.com.tw/Vigor2767/Firmware/latest.txt": _fixture(
-            "latest-vigor2767.txt"
-        ),
+        "https://fw.draytek.com.tw/Vigor2767/Firmware/": _fixture("firmware-vigor2767.html"),
+        "https://fw.draytek.com.tw/Vigor2767/Firmware/latest.txt": _fixture("latest-vigor2767.txt"),
         "https://fw.draytek.com.tw/Vigor2767/Firmware/v5.4.0/": _fixture(
             "version-vigor2767-v5.4.0.html"
         ),
@@ -44,12 +40,8 @@ def _responses() -> dict[str, str]:
             "digests-vigor2767.txt"
         ),
         # Vigor2962 产品 (多 channel)
-        "https://fw.draytek.com.tw/Vigor2962/Firmware/": _fixture(
-            "firmware-vigor2962.html"
-        ),
-        "https://fw.draytek.com.tw/Vigor2962/Firmware/latest.txt": _fixture(
-            "latest-vigor2962.txt"
-        ),
+        "https://fw.draytek.com.tw/Vigor2962/Firmware/": _fixture("firmware-vigor2962.html"),
+        "https://fw.draytek.com.tw/Vigor2962/Firmware/latest.txt": _fixture("latest-vigor2962.txt"),
         "https://fw.draytek.com.tw/Vigor2962/Firmware/latest_stable.txt": _fixture(
             "latest-stable-vigor2962.txt"
         ),
@@ -76,7 +68,7 @@ class _MockHttpFetcher:
     fail_url: str | None = None
 
     async def get_text(self, url: str, *, headers=None):
-        from firmatlas.infra.http_client import FetchError, FetchedText
+        from firmatlas.infra.http_client import FetchedText, FetchError
 
         if self.fail_url is not None and url.casefold() == self.fail_url.casefold():
             raise FetchError(url=url, status_code=None, detail="simulated failure")
@@ -239,12 +231,8 @@ async def test_product_source_url_is_constructed() -> None:
 @pytest.mark.anyio
 async def test_source_key_contract_is_stable() -> None:
     """两次运行同一 fixture 应产出相同的 source_key（大小写不敏感）。"""
-    first = next(
-        p for p in _products(await _discover()) if p.model_raw == "Vigor2767"
-    )
-    second = next(
-        p for p in _products(await _discover()) if p.model_raw == "Vigor2767"
-    )
+    first = next(p for p in _products(await _discover()) if p.model_raw == "Vigor2767")
+    second = next(p for p in _products(await _discover()) if p.model_raw == "Vigor2767")
 
     assert first.source_key == second.source_key
     assert first.source_key == "draytek-ftp:vigor2767"
@@ -261,9 +249,7 @@ async def test_source_key_contract_is_stable() -> None:
     art1 = rel1.artifacts[0]
     art2 = rel2.artifacts[0]
     assert art1.source_key == art2.source_key
-    assert art1.source_key == (
-        "draytek-ftp:Vigor2767/Firmware/v5.4.0/Vigor2767_v5.4.0.zip"
-    )
+    assert art1.source_key == ("draytek-ftp:Vigor2767/Firmware/v5.4.0/Vigor2767_v5.4.0.zip")
 
 
 # ---------------------------------------------------------------------------
@@ -276,9 +262,7 @@ def _refresh_request(**overrides) -> ArtifactRefreshRequest:
         "product_source_key": "draytek-ftp:vigor2767",
         "hardware_revision_source_key": "__unspecified__",
         "release_source_key": "draytek-ftp:vigor2767/fw/5.4.0",
-        "artifact_source_key": (
-            "draytek-ftp:Vigor2767/Firmware/v5.4.0/Vigor2767_v5.4.0.zip"
-        ),
+        "artifact_source_key": ("draytek-ftp:Vigor2767/Firmware/v5.4.0/Vigor2767_v5.4.0.zip"),
         "stale_url": "https://fw.draytek.com.tw/Vigor2767/Firmware/v5.4.0/Vigor2767_v5.4.0.zip",
         "known_filename": "Vigor2767_v5.4.0.zip",
         "known_size": None,
@@ -296,8 +280,7 @@ async def test_refresh_finds_same_artifact() -> None:
 
     assert isinstance(result, ArtifactUrlRefreshed)
     assert result.download_url == (
-        "https://fw.draytek.com.tw/Vigor2767/Firmware/v5.4.0/"
-        "Vigor2767_v5.4.0.zip"
+        "https://fw.draytek.com.tw/Vigor2767/Firmware/v5.4.0/Vigor2767_v5.4.0.zip"
     )
 
 
@@ -317,9 +300,7 @@ async def test_refresh_rejects_identity_mismatch() -> None:
 async def test_refresh_rejects_unparseable_artifact_key() -> None:
     """无法解析的 artifact_source_key 应拒绝。"""
     adapter = DraytekGlobalAdapter(_MockHttpFetcher(_responses()))
-    result = await adapter.refresh_artifact_url(
-        _refresh_request(artifact_source_key="garbage-key")
-    )
+    result = await adapter.refresh_artifact_url(_refresh_request(artifact_source_key="garbage-key"))
 
     assert isinstance(result, ArtifactRefreshFailed)
     assert result.reason_code == RefreshFailureReason.IDENTITY_CONFLICT

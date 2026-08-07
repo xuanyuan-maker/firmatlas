@@ -53,7 +53,13 @@ class ScriptedDownloader:
         self.size_tolerances: list[int] = []  # 记录每次调用收到的 size_tolerance
 
     async def download(
-        self, *, url, dest: Path, expected_size=None, on_progress=None, referer=None,
+        self,
+        *,
+        url,
+        dest: Path,
+        expected_size=None,
+        on_progress=None,
+        referer=None,
         size_tolerance=0,
     ):
         self.calls.append(url)
@@ -91,8 +97,10 @@ def succeeded() -> DownloadSucceeded:
 
 def failed_404() -> DownloadFailed:
     return DownloadFailed(
-        error_code=DownloadErrorCode.HTTP_404, http_status=404,
-        detail="HTTP 404", bytes_received=0,
+        error_code=DownloadErrorCode.HTTP_404,
+        http_status=404,
+        detail="HTTP 404",
+        bytes_received=0,
     )
 
 
@@ -107,15 +115,15 @@ def data_dir(tmp_path) -> Path:
 
 
 @pytest.fixture
-def seeded_artifact_id(
-    uow_factory, seeded_source, seeded_run, make_product_candidate
-) -> str:
+def seeded_artifact_id(uow_factory, seeded_source, seeded_run, make_product_candidate) -> str:
     """经真实 Repository 入库一棵产品子树，返回其 Artifact ID。"""
     with uow_factory.begin() as uow:
         product = make_product_candidate()
         p = uow.catalog.upsert_product(
-            source_id=seeded_source.id, candidate=product,
-            run_id=seeded_run.id, seen_at=utc_now(),
+            source_id=seeded_source.id,
+            candidate=product,
+            run_id=seeded_run.id,
+            seen_at=utc_now(),
         )
         hw = product.hardware_revisions[0]
         h = uow.catalog.upsert_hardware_revision(
@@ -123,20 +131,22 @@ def seeded_artifact_id(
         )
         release = hw.releases[0]
         r = uow.catalog.upsert_release(
-            hardware_revision_id=h.entity_id, candidate=release,
-            run_id=seeded_run.id, seen_at=utc_now(),
+            hardware_revision_id=h.entity_id,
+            candidate=release,
+            run_id=seeded_run.id,
+            seen_at=utc_now(),
         )
         a = uow.catalog.upsert_artifact(
-            release_id=r.entity_id, candidate=release.artifacts[0],
-            run_id=seeded_run.id, seen_at=utc_now(),
+            release_id=r.entity_id,
+            candidate=release.artifacts[0],
+            run_id=seeded_run.id,
+            seen_at=utc_now(),
         )
         return a.entity_id
 
 
 @pytest.fixture
-def seeded_omada_artifact_id(
-    uow_factory, make_source, make_product_candidate
-) -> str:
+def seeded_omada_artifact_id(uow_factory, make_source, make_product_candidate) -> str:
     """入库一个 omada-global Artifact，供来源专用下载行为测试。"""
     source = make_source(
         vendor_key="omada",
@@ -183,8 +193,13 @@ def seeded_omada_artifact_id(
 
 @pytest.fixture
 def seeded_checksum_artifact_id(
-    uow_factory, seeded_source, seeded_run, make_product_candidate,
-    make_artifact_candidate, make_release_candidate, make_revision_candidate,
+    uow_factory,
+    seeded_source,
+    seeded_run,
+    make_product_candidate,
+    make_artifact_candidate,
+    make_release_candidate,
+    make_revision_candidate,
 ):
     """入库带官方校验和的 Artifact，algorithm 由测试指定。"""
 
@@ -197,30 +212,35 @@ def seeded_checksum_artifact_id(
         )
         with uow_factory.begin() as uow:
             p = uow.catalog.upsert_product(
-                source_id=seeded_source.id, candidate=product,
-                run_id=seeded_run.id, seen_at=utc_now(),
+                source_id=seeded_source.id,
+                candidate=product,
+                run_id=seeded_run.id,
+                seen_at=utc_now(),
             )
             h = uow.catalog.upsert_hardware_revision(
-                product_id=p.entity_id, candidate=product.hardware_revisions[0],
-                run_id=seeded_run.id, seen_at=utc_now(),
+                product_id=p.entity_id,
+                candidate=product.hardware_revisions[0],
+                run_id=seeded_run.id,
+                seen_at=utc_now(),
             )
             r = uow.catalog.upsert_release(
                 hardware_revision_id=h.entity_id,
                 candidate=product.hardware_revisions[0].releases[0],
-                run_id=seeded_run.id, seen_at=utc_now(),
+                run_id=seeded_run.id,
+                seen_at=utc_now(),
             )
             a = uow.catalog.upsert_artifact(
-                release_id=r.entity_id, candidate=artifact,
-                run_id=seeded_run.id, seen_at=utc_now(),
+                release_id=r.entity_id,
+                candidate=artifact,
+                run_id=seeded_run.id,
+                seen_at=utc_now(),
             )
             return a.entity_id
 
     return _seed
 
 
-def run_download(
-    *, artifact_id, uow_factory, downloader, data_dir, adapter=None
-) -> DownloadReport:
+def run_download(*, artifact_id, uow_factory, downloader, data_dir, adapter=None) -> DownloadReport:
     store = ArtifactStore(data_dir)
     return asyncio.run(
         download_artifact(
@@ -250,8 +270,10 @@ def test_success_without_official_checksum(uow_factory, seeded_artifact_id, data
     downloader = ScriptedDownloader([succeeded()])
 
     report = run_download(
-        artifact_id=seeded_artifact_id, uow_factory=uow_factory,
-        downloader=downloader, data_dir=data_dir,
+        artifact_id=seeded_artifact_id,
+        uow_factory=uow_factory,
+        downloader=downloader,
+        data_dir=data_dir,
     )
 
     assert report.status is DownloadStatus.COMPLETED
@@ -298,16 +320,16 @@ def test_omada_uses_source_specific_size_tolerance(
     assert downloader.size_tolerances == [8 * 1024]
 
 
-def test_success_with_matching_sha256(
-    uow_factory, seeded_checksum_artifact_id, data_dir
-):
+def test_success_with_matching_sha256(uow_factory, seeded_checksum_artifact_id, data_dir):
     """官方 sha256 校验和一致：verified（AC-26）。"""
     artifact_id = seeded_checksum_artifact_id(OfficialChecksum("sha256", CONTENT_SHA256))
     downloader = ScriptedDownloader([succeeded()])
 
     report = run_download(
-        artifact_id=artifact_id, uow_factory=uow_factory,
-        downloader=downloader, data_dir=data_dir,
+        artifact_id=artifact_id,
+        uow_factory=uow_factory,
+        downloader=downloader,
+        data_dir=data_dir,
     )
 
     assert report.status is DownloadStatus.COMPLETED
@@ -320,8 +342,10 @@ def test_success_with_matching_md5(uow_factory, seeded_checksum_artifact_id, dat
     downloader = ScriptedDownloader([succeeded()])
 
     report = run_download(
-        artifact_id=artifact_id, uow_factory=uow_factory,
-        downloader=downloader, data_dir=data_dir,
+        artifact_id=artifact_id,
+        uow_factory=uow_factory,
+        downloader=downloader,
+        data_dir=data_dir,
     )
 
     assert report.verification_status is VerificationStatus.VERIFIED
@@ -332,15 +356,15 @@ def test_success_with_matching_md5(uow_factory, seeded_checksum_artifact_id, dat
 # ---------------------------------------------------------------------------
 
 
-def test_checksum_mismatch_not_promoted(
-    uow_factory, seeded_checksum_artifact_id, data_dir
-):
+def test_checksum_mismatch_not_promoted(uow_factory, seeded_checksum_artifact_id, data_dir):
     artifact_id = seeded_checksum_artifact_id(OfficialChecksum("sha256", "0" * 64))
     downloader = ScriptedDownloader([succeeded()])
 
     report = run_download(
-        artifact_id=artifact_id, uow_factory=uow_factory,
-        downloader=downloader, data_dir=data_dir,
+        artifact_id=artifact_id,
+        uow_factory=uow_factory,
+        downloader=downloader,
+        data_dir=data_dir,
     )
 
     assert report.status is DownloadStatus.FAILED
@@ -362,16 +386,22 @@ def test_checksum_mismatch_not_promoted(
 
 def test_download_failure_no_archive(uow_factory, seeded_artifact_id, data_dir):
     """HTTP 5xx 失败：failed 落库、无归档、无临时残留。"""
-    downloader = ScriptedDownloader([
-        DownloadFailed(
-            error_code=DownloadErrorCode.HTTP_5XX, http_status=500,
-            detail="HTTP 500", bytes_received=0,
-        )
-    ])
+    downloader = ScriptedDownloader(
+        [
+            DownloadFailed(
+                error_code=DownloadErrorCode.HTTP_5XX,
+                http_status=500,
+                detail="HTTP 500",
+                bytes_received=0,
+            )
+        ]
+    )
 
     report = run_download(
-        artifact_id=seeded_artifact_id, uow_factory=uow_factory,
-        downloader=downloader, data_dir=data_dir,
+        artifact_id=seeded_artifact_id,
+        uow_factory=uow_factory,
+        downloader=downloader,
+        data_dir=data_dir,
     )
 
     assert report.status is DownloadStatus.FAILED
@@ -384,16 +414,22 @@ def test_download_failure_no_archive(uow_factory, seeded_artifact_id, data_dir):
 
 def test_interrupted_download_marks_interrupted(uow_factory, seeded_artifact_id, data_dir):
     """中断（连接被重置等）：置 interrupted，不产生正常归档记录。"""
-    downloader = ScriptedDownloader([
-        DownloadFailed(
-            error_code=DownloadErrorCode.INTERRUPTED, http_status=None,
-            detail="下载中断: connection reset", bytes_received=1024,
-        )
-    ])
+    downloader = ScriptedDownloader(
+        [
+            DownloadFailed(
+                error_code=DownloadErrorCode.INTERRUPTED,
+                http_status=None,
+                detail="下载中断: connection reset",
+                bytes_received=1024,
+            )
+        ]
+    )
 
     report = run_download(
-        artifact_id=seeded_artifact_id, uow_factory=uow_factory,
-        downloader=downloader, data_dir=data_dir,
+        artifact_id=seeded_artifact_id,
+        uow_factory=uow_factory,
+        downloader=downloader,
+        data_dir=data_dir,
     )
 
     assert report.status is DownloadStatus.INTERRUPTED
@@ -404,16 +440,22 @@ def test_interrupted_download_marks_interrupted(uow_factory, seeded_artifact_id,
 
 
 def test_size_mismatch_fails(uow_factory, seeded_artifact_id, data_dir):
-    downloader = ScriptedDownloader([
-        DownloadFailed(
-            error_code=DownloadErrorCode.SIZE_MISMATCH, http_status=None,
-            detail="大小不符", bytes_received=100,
-        )
-    ])
+    downloader = ScriptedDownloader(
+        [
+            DownloadFailed(
+                error_code=DownloadErrorCode.SIZE_MISMATCH,
+                http_status=None,
+                detail="大小不符",
+                bytes_received=100,
+            )
+        ]
+    )
 
     report = run_download(
-        artifact_id=seeded_artifact_id, uow_factory=uow_factory,
-        downloader=downloader, data_dir=data_dir,
+        artifact_id=seeded_artifact_id,
+        uow_factory=uow_factory,
+        downloader=downloader,
+        data_dir=data_dir,
     )
 
     assert report.status is DownloadStatus.FAILED
@@ -433,8 +475,11 @@ def test_404_triggers_refresh_then_success(uow_factory, seeded_artifact_id, data
     )
 
     report = run_download(
-        artifact_id=seeded_artifact_id, uow_factory=uow_factory,
-        downloader=downloader, data_dir=data_dir, adapter=adapter,
+        artifact_id=seeded_artifact_id,
+        uow_factory=uow_factory,
+        downloader=downloader,
+        data_dir=data_dir,
+        adapter=adapter,
     )
 
     assert report.status is DownloadStatus.COMPLETED
@@ -499,13 +544,16 @@ def test_refresh_only_once(uow_factory, seeded_artifact_id, data_dir):
     )
 
     report = run_download(
-        artifact_id=seeded_artifact_id, uow_factory=uow_factory,
-        downloader=downloader, data_dir=data_dir, adapter=adapter,
+        artifact_id=seeded_artifact_id,
+        uow_factory=uow_factory,
+        downloader=downloader,
+        data_dir=data_dir,
+        adapter=adapter,
     )
 
     assert report.status is DownloadStatus.FAILED
-    assert len(adapter.requests) == 1        # 只刷新了一次
-    assert len(downloader.calls) == 2        # 原始 + 重试各一次
+    assert len(adapter.requests) == 1  # 只刷新了一次
+    assert len(downloader.calls) == 2  # 原始 + 重试各一次
 
 
 def test_refresh_failed_reports_original_error(uow_factory, seeded_artifact_id, data_dir):
@@ -516,8 +564,11 @@ def test_refresh_failed_reports_original_error(uow_factory, seeded_artifact_id, 
     )
 
     report = run_download(
-        artifact_id=seeded_artifact_id, uow_factory=uow_factory,
-        downloader=downloader, data_dir=data_dir, adapter=adapter,
+        artifact_id=seeded_artifact_id,
+        uow_factory=uow_factory,
+        downloader=downloader,
+        data_dir=data_dir,
+        adapter=adapter,
     )
 
     assert report.status is DownloadStatus.FAILED
@@ -531,8 +582,10 @@ def test_no_adapter_no_refresh(uow_factory, seeded_artifact_id, data_dir):
     downloader = ScriptedDownloader([failed_404()])
 
     report = run_download(
-        artifact_id=seeded_artifact_id, uow_factory=uow_factory,
-        downloader=downloader, data_dir=data_dir,
+        artifact_id=seeded_artifact_id,
+        uow_factory=uow_factory,
+        downloader=downloader,
+        data_dir=data_dir,
     )
 
     assert report.status is DownloadStatus.FAILED
@@ -541,12 +594,16 @@ def test_no_adapter_no_refresh(uow_factory, seeded_artifact_id, data_dir):
 
 def test_5xx_does_not_trigger_refresh(uow_factory, seeded_artifact_id, data_dir):
     """5xx 不属于失效地址，不触发刷新。"""
-    downloader = ScriptedDownloader([
-        DownloadFailed(
-            error_code=DownloadErrorCode.HTTP_5XX, http_status=502,
-            detail="HTTP 502", bytes_received=0,
-        )
-    ])
+    downloader = ScriptedDownloader(
+        [
+            DownloadFailed(
+                error_code=DownloadErrorCode.HTTP_5XX,
+                http_status=502,
+                detail="HTTP 502",
+                bytes_received=0,
+            )
+        ]
+    )
     adapter = ScriptedAdapter(
         ArtifactUrlRefreshed(
             download_url="https://example.com/should-not-happen", url_expires_at=None
@@ -554,8 +611,11 @@ def test_5xx_does_not_trigger_refresh(uow_factory, seeded_artifact_id, data_dir)
     )
 
     report = run_download(
-        artifact_id=seeded_artifact_id, uow_factory=uow_factory,
-        downloader=downloader, data_dir=data_dir, adapter=adapter,
+        artifact_id=seeded_artifact_id,
+        uow_factory=uow_factory,
+        downloader=downloader,
+        data_dir=data_dir,
+        adapter=adapter,
     )
 
     assert report.status is DownloadStatus.FAILED
@@ -571,8 +631,10 @@ def test_unknown_artifact_raises(uow_factory, data_dir):
     downloader = ScriptedDownloader([])
     with pytest.raises(UnknownArtifactError):
         run_download(
-            artifact_id="does-not-exist", uow_factory=uow_factory,
-            downloader=downloader, data_dir=data_dir,
+            artifact_id="does-not-exist",
+            uow_factory=uow_factory,
+            downloader=downloader,
+            data_dir=data_dir,
         )
 
 
@@ -585,6 +647,8 @@ def test_concurrent_download_rejected(uow_factory, seeded_artifact_id, data_dir)
     downloader = ScriptedDownloader([succeeded()])
     with pytest.raises(ActiveDownloadExistsError):
         run_download(
-            artifact_id=seeded_artifact_id, uow_factory=uow_factory,
-            downloader=downloader, data_dir=data_dir,
+            artifact_id=seeded_artifact_id,
+            uow_factory=uow_factory,
+            downloader=downloader,
+            data_dir=data_dir,
         )

@@ -273,20 +273,39 @@ download_records = Table(
 )
 
 # 推荐索引（需求分析 0x0B「推荐索引」）
-Index("ix_products_source_family_type", products.c.source_id, products.c.product_family,
-      products.c.product_type)
+Index(
+    "ix_products_source_family_type",
+    products.c.source_id,
+    products.c.product_family,
+    products.c.product_type,
+)
 Index("ix_products_model_normalized", products.c.model_normalized)
-Index("ix_revisions_product_normalized", hardware_revisions.c.product_id,
-      hardware_revisions.c.normalized_revision)
-Index("ix_releases_revision_version", firmware_releases.c.hardware_revision_id,
-      firmware_releases.c.version_normalized)
-Index("ix_releases_visibility_date", firmware_releases.c.visibility_status,
-      firmware_releases.c.release_date)
-Index("ix_artifacts_release_visibility", firmware_artifacts.c.release_id,
-      firmware_artifacts.c.visibility_status)
+Index(
+    "ix_revisions_product_normalized",
+    hardware_revisions.c.product_id,
+    hardware_revisions.c.normalized_revision,
+)
+Index(
+    "ix_releases_revision_version",
+    firmware_releases.c.hardware_revision_id,
+    firmware_releases.c.version_normalized,
+)
+Index(
+    "ix_releases_visibility_date",
+    firmware_releases.c.visibility_status,
+    firmware_releases.c.release_date,
+)
+Index(
+    "ix_artifacts_release_visibility",
+    firmware_artifacts.c.release_id,
+    firmware_artifacts.c.visibility_status,
+)
 Index("ix_runs_source_started", crawl_runs.c.source_id, crawl_runs.c.started_at)
-Index("ix_downloads_artifact_requested", download_records.c.artifact_id,
-      download_records.c.requested_at)
+Index(
+    "ix_downloads_artifact_requested",
+    download_records.c.artifact_id,
+    download_records.c.requested_at,
+)
 Index("ix_downloads_status_requested", download_records.c.status, download_records.c.requested_at)
 Index("ix_downloads_sha256", download_records.c.sha256)
 

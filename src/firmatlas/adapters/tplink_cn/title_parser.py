@@ -18,9 +18,7 @@ from datetime import date
 
 # " TL-R5009PE-AC V1.0升级软件20260108_1.0.30"
 #  └─ 型号 ──────────┘  └─HW┘        └─日期─┘ └─固件版本─┘
-_TITLE_PATTERN = re.compile(
-    r"^(.+?) V(\S+?)升级软件(\d{8})_(.+)$"
-)
+_TITLE_PATTERN = re.compile(r"^(.+?) V(\S+?)升级软件(\d{8})_(.+)$")
 
 
 @dataclass(frozen=True)

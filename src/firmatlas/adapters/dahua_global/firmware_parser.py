@@ -38,9 +38,7 @@ class FirmwareEntry:
 
 _VERSION_PATTERN = re.compile(r"V\d+(?:\.\d+)+(?:\.R\.\d+)?", re.IGNORECASE)
 
-_SIZE_PATTERN = re.compile(
-    r"(?P<value>\d+(?:\.\d+)?)\s*(?P<unit>KB|MB|GB|TB|B)", re.IGNORECASE
-)
+_SIZE_PATTERN = re.compile(r"(?P<value>\d+(?:\.\d+)?)\s*(?P<unit>KB|MB|GB|TB|B)", re.IGNORECASE)
 
 _SIZE_MULTIPLIERS: dict[str, int] = {
     "B": 1,

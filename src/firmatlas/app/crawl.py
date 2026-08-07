@@ -120,8 +120,11 @@ async def crawl_source(*, adapter: SourceAdapter, uow_factory: UnitOfWorkFactory
 
     # --- 收尾事务 --------------------------------------------------------
     # 消失对账的充要条件（AC-15/16）：适配器声明完整 且 无致命错误 且 所有子树入库成功
-    reconcile = completion is not None and completion.is_complete and fatal_error is None and (
-        persist_failures == 0
+    reconcile = (
+        completion is not None
+        and completion.is_complete
+        and fatal_error is None
+        and (persist_failures == 0)
     )
 
     if reconcile:
@@ -145,9 +148,7 @@ async def crawl_source(*, adapter: SourceAdapter, uow_factory: UnitOfWorkFactory
             summary = uow.catalog.mark_unseen_as_disappeared(
                 source_id=source.id, run_id=run.id, confirmed_at=finished_at
             )
-            counter.items_disappeared = (
-                summary.releases_disappeared + summary.artifacts_disappeared
-            )
+            counter.items_disappeared = summary.releases_disappeared + summary.artifacts_disappeared
         stats = counter.to_stats()
         uow.runs.finalize_run(
             run_id=run.id,

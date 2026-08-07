@@ -43,17 +43,17 @@ def test_target_categories(menu_name, family, product_type):
 @pytest.mark.parametrize(
     "menu_name",
     [
-        "4G Wi-Fi Gateways",   # Omada 商用蜂窝网关，排除
-        "Wired Gateways",      # 商用有线网关，排除
-        "DSL Gateway",         # 调制解调网关，排除
+        "4G Wi-Fi Gateways",  # Omada 商用蜂窝网关，排除
+        "Wired Gateways",  # 商用有线网关，排除
+        "DSL Gateway",  # 调制解调网关，排除
         "Cable Modems & Routers",  # 有线调制解调器，排除
-        "Video Recorders",     # NVR 录像机，非摄像头
+        "Video Recorders",  # NVR 录像机，非摄像头
         "Security Camera Systems",  # 摄像头+NVR 套装，排除
-        "All Unmanaged Switches",   # 交换机，非目标
-        "Smart Plugs",         # 智能插座，非目标
-        "Range Extenders",     # 信号扩展器，非目标
-        "",                    # 空串
-        "Unknown Category",    # 未知分类
+        "All Unmanaged Switches",  # 交换机，非目标
+        "Smart Plugs",  # 智能插座，非目标
+        "Range Extenders",  # 信号扩展器，非目标
+        "",  # 空串
+        "Unknown Category",  # 未知分类
     ],
 )
 def test_non_target_categories_return_none(menu_name):

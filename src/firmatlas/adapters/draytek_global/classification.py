@@ -32,10 +32,10 @@ _EXCLUDED_VIGOR_PREFIXES = (
     "VIGORTALK",
     "VIGORACCESS",
     "VIGORIPPBX",
-    "VIGORBX",    # PBX 基站
+    "VIGORBX",  # PBX 基站
     "VIGORACS",
-    "VIGORFLY",   # 旅行路由器太小众，跳过
-    "VIGORPRO",   # UTM 安全设备，不是纯路由器
+    "VIGORFLY",  # 旅行路由器太小众，跳过
+    "VIGORPRO",  # UTM 安全设备，不是纯路由器
 )
 
 

@@ -74,9 +74,9 @@ def test_4g5g_class_ipc_camera_is_captured() -> None:
 @pytest.mark.parametrize(
     "class_id, model",
     [
-        ("2627", "TL-ZJ800"),   # 支架配件
+        ("2627", "TL-ZJ800"),  # 支架配件
         ("2627", "TL-SP930H"),  # 供电配件
-        ("2627", "TL-K234"),    # 非摄像机配件
+        ("2627", "TL-K234"),  # 非摄像机配件
         ("2631", "TL-SP620H"),  # 供电配件（即使出现在 2631 也不收）
     ],
 )
@@ -316,11 +316,7 @@ def test_candidate_ids_exclude_parent_and_non_target_wireless_classes() -> None:
 
 def test_candidate_ids_exist_in_fixture_class_map() -> None:
     data = json.loads(FIXTURE.read_text(encoding="utf-8"))
-    known_ids = {
-        child["id"]
-        for top in data["topProductClassList"]
-        for child in top["childrens"]
-    }
+    known_ids = {child["id"] for top in data["topProductClassList"] for child in top["childrens"]}
     wireless = json.loads(WIRELESS_FIXTURE.read_text(encoding="utf-8"))
     known_ids.update(str(child["classId"]) for child in wireless["subClasses"])
     for class_id in candidate_product_class_ids():

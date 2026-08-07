@@ -36,7 +36,7 @@ class _Route:
     """一条 URL → 响应的路由。text 为 None 表示抛异常（模拟站外重定向失败）。"""
 
     text: str | None
-    final_url: str | None = None      # 重定向后的最终 URL（默认等于请求 URL）
+    final_url: str | None = None  # 重定向后的最终 URL（默认等于请求 URL）
     raise_error: bool = False
 
 
@@ -115,11 +115,7 @@ async def test_discover_completes() -> None:
 async def test_discover_target_products() -> None:
     """目标类型号产出正确的产品树（router / mesh / camera）。"""
     events = await _run_discover()
-    products = {
-        p.product.source_key: p.product
-        for p in events
-        if isinstance(p, DiscoveredProduct)
-    }
+    products = {p.product.source_key: p.product for p in events if isinstance(p, DiscoveredProduct)}
 
     # Archer BE670（单硬件版本路由器）
     assert "archer-be670" in products
@@ -129,8 +125,10 @@ async def test_discover_target_products() -> None:
     assert be670.source_category == "WiFi Routers"
     assert len(be670.hardware_revisions) == 1
     hw = be670.hardware_revisions[0]
-    assert hw.releases[0].artifacts[0].download_url.startswith(
-        "https://static.tp-link.com/upload/firmware/"
+    assert (
+        hw.releases[0]
+        .artifacts[0]
+        .download_url.startswith("https://static.tp-link.com/upload/firmware/")
     )
 
     # Deco X55（多硬件版本 mesh）
@@ -176,7 +174,8 @@ async def test_source_key_contract() -> None:
     """source_key 生成契约：稳定 URL 路径派生，可复现。"""
     events = await _run_discover()
     be670 = next(
-        p.product for p in events
+        p.product
+        for p in events
         if isinstance(p, DiscoveredProduct) and p.product.source_key == "archer-be670"
     )
     hw = be670.hardware_revisions[0]
@@ -196,7 +195,8 @@ async def test_size_parsed_to_bytes() -> None:
     """文件大小文本 "18.66 MB" 解析为近似字节数。"""
     events = await _run_discover()
     be670 = next(
-        p.product for p in events
+        p.product
+        for p in events
         if isinstance(p, DiscoveredProduct) and p.product.source_key == "archer-be670"
     )
     art = be670.hardware_revisions[0].releases[0].artifacts[0]

@@ -218,10 +218,7 @@ class TplinkCnAdapter:
                 SkippedCandidate(
                     stage="artifact",
                     reason_code=SkipReason.UNMAPPED_TYPE,
-                    detail=(
-                        f"型号 {parsed.model_raw}（品类 {class_id}）"
-                        f"不在采集范围"
-                    ),
+                    detail=(f"型号 {parsed.model_raw}（品类 {class_id}）不在采集范围"),
                     source_url=url,
                     raw_hint=api_id,
                 )
@@ -329,12 +326,9 @@ class TplinkCnAdapter:
             hardware_revisions=tuple(hw_candidates),
         )
 
-
     # -- refresh_artifact_url --------------------------------------------
 
-    async def refresh_artifact_url(
-        self, request: ArtifactRefreshRequest
-    ) -> ArtifactRefreshResult:
+    async def refresh_artifact_url(self, request: ArtifactRefreshRequest) -> ArtifactRefreshResult:
         """按产品型号重新搜索，找回 source_key（API 记录 id）相同的记录的最新地址。
 
         tp-link-cn 的 Artifact source_key 就是搜索 API 的记录 id（厂商稳定 ID），
@@ -443,12 +437,8 @@ class _ProductTree:
         download_url: str,
         doc_size_kb: int | None,
     ) -> None:
-        hw_node = self.hardware_revisions.setdefault(
-            hw_normalized, _HwNode(raw=hw_raw)
-        )
-        fw_node = hw_node.releases.setdefault(
-            fw_version, _FwNode()
-        )
+        hw_node = self.hardware_revisions.setdefault(hw_normalized, _HwNode(raw=hw_raw))
+        fw_node = hw_node.releases.setdefault(fw_version, _FwNode())
         fw_node.artifacts.append(
             _ArtEntry(
                 api_id=api_id,
@@ -492,6 +482,7 @@ class _ArtEntry:
 # source_key 生成规则
 # ---------------------------------------------------------------------------
 
+
 def _make_hw_source_key(model: str, hw_normalized: str) -> str:
     """硬件版本 source_key：{model}/v{hw}。"""
     return f"{model}/v{hw_normalized}"
@@ -505,6 +496,7 @@ def _make_release_source_key(model: str, hw_normalized: str, fw_version: str) ->
 # ---------------------------------------------------------------------------
 # 规范化辅助
 # ---------------------------------------------------------------------------
+
 
 def _normalize_model(model_raw: str) -> str:
     """型号规范化：去首尾空白，大写。保留中文变体。"""

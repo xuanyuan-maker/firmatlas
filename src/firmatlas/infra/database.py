@@ -85,9 +85,7 @@ def open_database(data_dir: Path) -> sa.Engine:
     """
     db_path = data_dir / DB_FILENAME
     if not db_path.exists():
-        raise DatabaseNotInitializedError(
-            f"数据库 {db_path} 不存在，请先运行 firmatlas init。"
-        )
+        raise DatabaseNotInitializedError(f"数据库 {db_path} 不存在，请先运行 firmatlas init。")
     engine = create_engine(db_path)
     try:
         with engine.connect() as conn:

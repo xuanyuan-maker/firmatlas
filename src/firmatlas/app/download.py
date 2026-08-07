@@ -101,7 +101,7 @@ class DownloadReport:
     download_id: str
     status: DownloadStatus
     verification_status: VerificationStatus
-    final_relative_path: str | None    # 相对 data 目录，如 firmware/tp-link/CN/...
+    final_relative_path: str | None  # 相对 data 目录，如 firmware/tp-link/CN/...
     bytes_received: int
     sha256: str | None
     url_refreshed: bool
@@ -137,9 +137,7 @@ async def download_artifact(
     # --- 占位符 URL 预解析（如 ruijie-cn 的 pending:{file_id}）-----------
     url = ctx.artifact.download_url
     if url.startswith("pending:") and adapter is not None:
-        refresh_result = await adapter.refresh_artifact_url(
-            _build_refresh_request(ctx, url)
-        )
+        refresh_result = await adapter.refresh_artifact_url(_build_refresh_request(ctx, url))
         if isinstance(refresh_result, ArtifactUrlRefreshed):
             url = refresh_result.download_url
             with uow_factory.begin() as uow:
@@ -152,9 +150,7 @@ async def download_artifact(
         else:
             # 占位符解析失败：直接标记失败，不尝试下载
             tmp_path.unlink(missing_ok=True)
-            message = (
-                f"下载地址解析失败（{refresh_result.reason_code}）: {refresh_result.detail}"
-            )
+            message = f"下载地址解析失败（{refresh_result.reason_code}）: {refresh_result.detail}"
             with uow_factory.begin() as uow:
                 uow.downloads.transition(
                     download_id=record.id,
@@ -386,9 +382,7 @@ def _build_refresh_request(ctx: ArtifactContext, stale_url: str) -> ArtifactRefr
     )
 
 
-def _verify_checksum(
-    ctx: ArtifactContext, sha256_hex: str, tmp_path: Path
-) -> VerificationStatus:
+def _verify_checksum(ctx: ArtifactContext, sha256_hex: str, tmp_path: Path) -> VerificationStatus:
     """比对官方校验和。
 
     - 无官方校验和 → not_available（允许归档）

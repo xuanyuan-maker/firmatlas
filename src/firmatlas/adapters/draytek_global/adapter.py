@@ -64,9 +64,7 @@ _ROOT_URL = "https://fw.draytek.com.tw/"
 
 # FIRMWARE.DIGESTS 文件解析正则
 # 格式: md5 sha1 .\filename
-_DIGESTS_LINE = re.compile(
-    r"^([0-9a-fA-F]{32})\s+([0-9a-fA-F]{40})\s+\.\\(.+)$"
-)
+_DIGESTS_LINE = re.compile(r"^([0-9a-fA-F]{32})\s+([0-9a-fA-F]{40})\s+\.\\(.+)$")
 
 # 固件版本号的规范化：去掉前导 v/V
 _VERSION_CLEAN = re.compile(r"^[vV]")
@@ -82,9 +80,7 @@ def _make_product_source_key(dir_name: str) -> str:
     return f"draytek-ftp:{dir_name.strip().casefold()}"
 
 
-def _make_release_source_key(
-    product_source_key: str, version: str, channel_label: str
-) -> str:
+def _make_release_source_key(product_source_key: str, version: str, channel_label: str) -> str:
     """Release source_key 组合产品 + 版本 + channel。"""
     base = f"{product_source_key}/fw/{version}"
     if channel_label:
@@ -213,8 +209,7 @@ class DraytekGlobalAdapter:
                 AdapterIssueSummary(
                     code="product_fetch_error",
                     detail=(
-                        f"{len(failures)} 个产品目录请求或解析失败；"
-                        f"示例: {'; '.join(failures[:3])}"
+                        f"{len(failures)} 个产品目录请求或解析失败；示例: {'; '.join(failures[:3])}"
                     ),
                     source_url=_ROOT_URL,
                 )
@@ -222,9 +217,7 @@ class DraytekGlobalAdapter:
 
         yield DiscoveryCompleted(
             is_complete=not failures,
-            incomplete_reason=(
-                f"{len(failures)} 个产品处理失败" if failures else None
-            ),
+            incomplete_reason=(f"{len(failures)} 个产品处理失败" if failures else None),
             issues=tuple(issues),
         )
 
@@ -251,9 +244,7 @@ class DraytekGlobalAdapter:
             channels.append(("", latest_version))
 
         # stable channel: 读 latest_stable.txt（如果存在）
-        stable_version = await self._read_version_file(
-            "latest_stable.txt", fw_entries
-        )
+        stable_version = await self._read_version_file("latest_stable.txt", fw_entries)
         if stable_version and stable_version != latest_version:
             channels.append(("stable", stable_version))
 
@@ -344,8 +335,7 @@ class DraytekGlobalAdapter:
 
         # 收集所有 .zip 固件文件（可能有多变体）
         zip_entries = [
-            e for e in version_entries
-            if not e.is_directory and e.name.lower().endswith(".zip")
+            e for e in version_entries if not e.is_directory and e.name.lower().endswith(".zip")
         ]
         if not zip_entries:
             return None
@@ -356,8 +346,7 @@ class DraytekGlobalAdapter:
         # 查找 release note PDF
         release_notes_url: str | None = None
         pdf_entry = next(
-            (e for e in version_entries
-             if not e.is_directory and e.name.lower().endswith(".pdf")),
+            (e for e in version_entries if not e.is_directory and e.name.lower().endswith(".pdf")),
             None,
         )
         if pdf_entry is not None:
@@ -388,9 +377,7 @@ class DraytekGlobalAdapter:
                 )
             )
 
-        release_key = _make_release_source_key(
-            product_key, cleaned_version, channel_label
-        )
+        release_key = _make_release_source_key(product_key, cleaned_version, channel_label)
 
         return FirmwareReleaseCandidate(
             source_key=release_key,
@@ -438,9 +425,7 @@ class DraytekGlobalAdapter:
 
     # -- refresh_artifact_url --------------------------------------------
 
-    async def refresh_artifact_url(
-        self, request: ArtifactRefreshRequest
-    ) -> ArtifactRefreshResult:
+    async def refresh_artifact_url(self, request: ArtifactRefreshRequest) -> ArtifactRefreshResult:
         """按产品名重新遍历 FTP，找回同一 Artifact 的最新下载地址。
 
         DrayTek 的 Artifact source_key 格式为:
@@ -488,10 +473,7 @@ class DraytekGlobalAdapter:
 
         # 检查已知版本目录是否仍存在
         version_dir_name = f"v{known_version}"
-        version_exists = any(
-            e.is_directory and e.name == version_dir_name
-            for e in fw_entries
-        )
+        version_exists = any(e.is_directory and e.name == version_dir_name for e in fw_entries)
 
         if not version_exists:
             return ArtifactRefreshFailed(
@@ -502,8 +484,7 @@ class DraytekGlobalAdapter:
         # 构造当前下载 URL（使用实际文件名）
         encoded_filename = known_filename.replace(" ", "%20")
         download_url = (
-            f"https://fw.draytek.com.tw/{encoded_dir}/"
-            f"Firmware/v{known_version}/{encoded_filename}"
+            f"https://fw.draytek.com.tw/{encoded_dir}/Firmware/v{known_version}/{encoded_filename}"
         )
         return ArtifactUrlRefreshed(
             download_url=download_url,
@@ -521,7 +502,7 @@ def _parse_artifact_source_key(source_key: str) -> tuple[str, str, str] | None:
     if not source_key.startswith(prefix):
         return None
 
-    path = source_key[len(prefix):]
+    path = source_key[len(prefix) :]
     # 格式: {dir_name}/Firmware/v{version}/{filename}
     parts = path.split("/")
     if len(parts) < 4:

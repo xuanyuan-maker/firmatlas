@@ -25,9 +25,14 @@ def test_create_run_starts_as_running(uow_factory, seeded_source):
 
 def test_finalize_run_persists_stats_and_issues(uow_factory, seeded_source):
     stats = CrawlStats(
-        products_seen=3, releases_seen=5, artifacts_seen=6,
-        items_added=10, items_updated=4, items_disappeared=1,
-        items_skipped=2, error_count=1,
+        products_seen=3,
+        releases_seen=5,
+        artifacts_seen=6,
+        items_added=10,
+        items_updated=4,
+        items_disappeared=1,
+        items_skipped=2,
+        error_count=1,
     )
     issues = [AdapterIssue(code="RATE_LIMITED", detail="命中限速，已退避重试", source_url=None)]
     with uow_factory.begin() as uow:

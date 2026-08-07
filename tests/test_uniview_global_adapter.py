@@ -20,7 +20,7 @@ from firmatlas.adapters.uniview_global.adapter import (
     _safe_key_part,
 )
 from firmatlas.domain.model import ArtifactType, ProductFamily, ProductType
-from firmatlas.infra.http_client import FetchError, FetchedText
+from firmatlas.infra.http_client import FetchedText, FetchError
 
 # ---------------------------------------------------------------------------
 # Fixture 路径
@@ -103,10 +103,7 @@ class TestExtractVersionFromFilename:
         )
 
     def test_no_version_match(self) -> None:
-        assert (
-            _extract_version_from_filename("unknown.zip")
-            == "unknown"
-        )
+        assert _extract_version_from_filename("unknown.zip") == "unknown"
 
 
 class TestParseDate:
@@ -132,7 +129,10 @@ class TestProductSourceKey:
 
 class TestSafeKeyPart:
     def test_spaces_replaced(self) -> None:
-        assert _safe_key_part("GIPC-B6218.7.5.251212 20260120.zip") == "GIPC-B6218.7.5.251212_20260120.zip"
+        assert (
+            _safe_key_part("GIPC-B6218.7.5.251212 20260120.zip")
+            == "GIPC-B6218.7.5.251212_20260120.zip"
+        )
 
     def test_parens_removed(self) -> None:
         assert _safe_key_part("ADF28(40)K-WP") == "ADF2840K-WP"
@@ -253,7 +253,10 @@ async def test_source_key_stability() -> None:
     p2 = second_run[0]
     assert p1.source_key == p2.source_key
     assert p1.hardware_revisions[0].source_key == p2.hardware_revisions[0].source_key
-    assert p1.hardware_revisions[0].releases[0].source_key == p2.hardware_revisions[0].releases[0].source_key
+    assert (
+        p1.hardware_revisions[0].releases[0].source_key
+        == p2.hardware_revisions[0].releases[0].source_key
+    )
     r1 = p1.hardware_revisions[0].releases[0]
     r2 = p2.hardware_revisions[0].releases[0]
     assert r1.artifacts[0].source_key == r2.artifacts[0].source_key
@@ -279,9 +282,7 @@ async def test_empty_category_no_products() -> None:
 @pytest.mark.anyio
 async def test_single_category_failure_not_catastrophic() -> None:
     """单个分类获取失败不应中断整体流程。"""
-    fetcher = _MockHttpFetcher(
-        fail_urls={_CATEGORY_URLS["PTZ Cameras"]}
-    )
+    fetcher = _MockHttpFetcher(fail_urls={_CATEGORY_URLS["PTZ Cameras"]})
     events = await _discover(fetcher)
 
     products = _products(events)
@@ -296,9 +297,7 @@ async def test_single_category_failure_not_catastrophic() -> None:
 @pytest.mark.anyio
 async def test_all_categories_failure_is_catastrophic() -> None:
     """所有分类失败时只产出 DiscoveryCompleted(is_complete=False)。"""
-    fetcher = _MockHttpFetcher(
-        fail_urls=set(_CATEGORY_URLS.values())
-    )
+    fetcher = _MockHttpFetcher(fail_urls=set(_CATEGORY_URLS.values()))
     events = await _discover(fetcher)
 
     assert len(events) == 1
@@ -310,9 +309,7 @@ async def test_all_categories_failure_is_catastrophic() -> None:
 @pytest.mark.anyio
 async def test_http_404_not_catastrophic() -> None:
     """HTTP 非 200 响应不抛异常，记录 issue 并继续处理其他分类。"""
-    fetcher = _MockHttpFetcher(
-        error_status_urls={_CATEGORY_URLS["PTZ Cameras"]: 404}
-    )
+    fetcher = _MockHttpFetcher(error_status_urls={_CATEGORY_URLS["PTZ Cameras"]: 404})
     events = await _discover(fetcher)
 
     products = _products(events)

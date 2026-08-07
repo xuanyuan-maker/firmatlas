@@ -114,9 +114,7 @@ class DahuaGlobalAdapter:
                             SkippedCandidate(
                                 stage="product",
                                 reason_code=SkipReason.MISSING_IDENTITY,
-                                detail=(
-                                    f"固件 {entry.firmware_name} 没有关联产品"
-                                ),
+                                detail=(f"固件 {entry.firmware_name} 没有关联产品"),
                                 source_url=_LIST_URL,
                                 raw_hint=entry.firmware_id,
                             )
@@ -131,8 +129,7 @@ class DahuaGlobalAdapter:
                                     stage="product",
                                     reason_code=SkipReason.UNMAPPED_TYPE,
                                     detail=(
-                                        f"产品 {prod.product_name} 为录像机，"
-                                        f"不在摄像机采集范围内"
+                                        f"产品 {prod.product_name} 为录像机，不在摄像机采集范围内"
                                     ),
                                     source_url=_LIST_URL,
                                     raw_hint=f"pid:{prod.product_id}",
@@ -179,15 +176,11 @@ class DahuaGlobalAdapter:
         is_complete = parse_failures == 0 and not issues
         yield DiscoveryCompleted(
             is_complete=is_complete,
-            incomplete_reason=(
-                f"{parse_failures} 条固件解析失败" if parse_failures else None
-            ),
+            incomplete_reason=(f"{parse_failures} 条固件解析失败" if parse_failures else None),
             issues=tuple(issues),
         )
 
-    async def refresh_artifact_url(
-        self, request: ArtifactRefreshRequest
-    ) -> ArtifactRefreshResult:
+    async def refresh_artifact_url(self, request: ArtifactRefreshRequest) -> ArtifactRefreshResult:
         """重新扫描固件列表，按 firmware_id 寻找同一 Artifact 的当前地址。"""
         if request.hardware_revision_source_key != UNSPECIFIED_REVISION_SOURCE_KEY:
             return ArtifactRefreshFailed(
@@ -210,20 +203,15 @@ class DahuaGlobalAdapter:
             return ArtifactRefreshFailed(
                 reason_code=RefreshFailureReason.IDENTITY_CONFLICT,
                 detail=(
-                    "无法从 artifact_source_key 解析 firmware_id: "
-                    f"{request.artifact_source_key}"
+                    f"无法从 artifact_source_key 解析 firmware_id: {request.artifact_source_key}"
                 ),
             )
 
         for category_id in sorted(CAMERA_CATEGORY_IDS):
             try:
-                entry = await _find_firmware_by_id(
-                    self._http, category_id, firmware_id
-                )
+                entry = await _find_firmware_by_id(self._http, category_id, firmware_id)
                 if entry is not None:
-                    return _build_refresh_result(
-                        entry, request, product_id, firmware_id
-                    )
+                    return _build_refresh_result(entry, request, product_id, firmware_id)
             except Exception as exc:
                 return ArtifactRefreshFailed(
                     reason_code=RefreshFailureReason.SOURCE_ERROR,
@@ -299,8 +287,7 @@ def _build_refresh_result(
         )
 
     has_product = any(
-        _product_source_key(p.product_id) == request.product_source_key
-        for p in entry.products
+        _product_source_key(p.product_id) == request.product_source_key for p in entry.products
     )
     if not has_product:
         return ArtifactRefreshFailed(
@@ -358,9 +345,7 @@ class _ProductTree:
         self.releases[release_key] = _ReleaseInfo(
             source_key=release_key,
             version_raw=entry.version_raw,
-            version_normalized=(
-                entry.version_raw.lower() if entry.version_raw else None
-            ),
+            version_normalized=(entry.version_raw.lower() if entry.version_raw else None),
             release_date=entry.post_date,
             release_notes_url=entry.release_notes_url,
             artifact=_ArtifactInfo(

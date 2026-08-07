@@ -137,8 +137,7 @@ async def test_discover_camera_class_2549() -> None:
     # 所有 2549 下的产品应该都是 CAMERA
     for p_event in products:
         assert p_event.product.product_family.value == "camera", (
-            f"Expected camera, got {p_event.product.product_family} "
-            f"for {p_event.product.model_raw}"
+            f"Expected camera, got {p_event.product.product_family} for {p_event.product.model_raw}"
         )
 
 
@@ -155,9 +154,9 @@ async def test_source_keys_are_stable() -> None:
     async def collect_keys() -> dict[str, set[str]]:
         responses: dict[str, Any] = {}
         for cid in candidate_product_class_ids():
-            responses[f"{cid}_p1"] = fixture if cid == "2502" else {
-                "result": {"total": 0, "collection": []}
-            }
+            responses[f"{cid}_p1"] = (
+                fixture if cid == "2502" else {"result": {"total": 0, "collection": []}}
+            )
         adapter = TplinkCnAdapter(_MockHttpFetcher(responses))
         keys: dict[str, set[str]] = {
             "product": set(),
@@ -296,9 +295,9 @@ async def test_unparseable_title_is_skipped() -> None:
     from firmatlas.adapters.tplink_cn.classification import candidate_product_class_ids
 
     for cid in candidate_product_class_ids():
-        responses[f"{cid}_p1"] = mock_data if cid == "2502" else {
-            "result": {"total": 0, "collection": []}
-        }
+        responses[f"{cid}_p1"] = (
+            mock_data if cid == "2502" else {"result": {"total": 0, "collection": []}}
+        )
 
     adapter = TplinkCnAdapter(_MockHttpFetcher(responses))
     events = [e async for e in adapter.discover()]
@@ -333,9 +332,9 @@ async def test_doc_size_converted_to_bytes() -> None:
     from firmatlas.adapters.tplink_cn.classification import candidate_product_class_ids
 
     for cid in candidate_product_class_ids():
-        responses[f"{cid}_p1"] = mock_data if cid == "2502" else {
-            "result": {"total": 0, "collection": []}
-        }
+        responses[f"{cid}_p1"] = (
+            mock_data if cid == "2502" else {"result": {"total": 0, "collection": []}}
+        )
 
     adapter = TplinkCnAdapter(_MockHttpFetcher(responses))
     events = [e async for e in adapter.discover()]
@@ -400,9 +399,7 @@ def _search_hit(record_id: int, url: str) -> dict:
 @pytest.mark.anyio
 async def test_refresh_finds_new_url_by_record_id():
     new_url = "https://media.tp-link.com.cn/software/new-location.zip"
-    fetcher = _KeywordMockFetcher(
-        {"TL-R5009PE-AC_p1": _search_hit(1784097617201826, new_url)}
-    )
+    fetcher = _KeywordMockFetcher({"TL-R5009PE-AC_p1": _search_hit(1784097617201826, new_url)})
     adapter = TplinkCnAdapter(fetcher)
 
     result = await adapter.refresh_artifact_url(_refresh_request())

@@ -42,8 +42,16 @@ from firmatlas.infra.downloader import Downloader
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
     """清除代理环境变量，测试不发真实请求。"""
-    for v in ("all_proxy", "ALL_PROXY", "http_proxy", "HTTP_PROXY",
-              "https_proxy", "HTTPS_PROXY", "no_proxy", "NO_PROXY"):
+    for v in (
+        "all_proxy",
+        "ALL_PROXY",
+        "http_proxy",
+        "HTTP_PROXY",
+        "https_proxy",
+        "HTTPS_PROXY",
+        "no_proxy",
+        "NO_PROXY",
+    ):
         monkeypatch.delenv(v, raising=False)
 
 
@@ -60,49 +68,97 @@ def make_artifact_context() -> ArtifactContext:
 
     now = datetime(2026, 7, 17, tzinfo=UTC)
     source = FirmwareSource(
-        id=new_id(), vendor_key="tp-link", vendor_name="TP-Link",
-        source_key="tp-link-cn", name="TP-Link CN", region_code="CN",
-        locale="zh-CN", base_url="https://resource.tp-link.com.cn/",
-        adapter_key="tplink_cn", discovery_method=DiscoveryMethod.API, enabled=True,
-        created_at=now, updated_at=now,
+        id=new_id(),
+        vendor_key="tp-link",
+        vendor_name="TP-Link",
+        source_key="tp-link-cn",
+        name="TP-Link CN",
+        region_code="CN",
+        locale="zh-CN",
+        base_url="https://resource.tp-link.com.cn/",
+        adapter_key="tplink_cn",
+        discovery_method=DiscoveryMethod.API,
+        enabled=True,
+        created_at=now,
+        updated_at=now,
     )
     product = Product(
-        id=new_id(), source_id=source.id, source_key="sar305g",
-        display_name="SAR305G", model_raw="SAR305G", model_normalized="sar305g",
-        series=None, product_family=ProductFamily.ROUTER,
-        product_type=ProductType.ROUTER, source_category="企业VPN路由器",
-        source_url="https://resource.tp-link.com.cn/", first_seen_at=now,
-        last_seen_at=now, last_seen_run_id="", created_at=now, updated_at=now,
+        id=new_id(),
+        source_id=source.id,
+        source_key="sar305g",
+        display_name="SAR305G",
+        model_raw="SAR305G",
+        model_normalized="sar305g",
+        series=None,
+        product_family=ProductFamily.ROUTER,
+        product_type=ProductType.ROUTER,
+        source_category="企业VPN路由器",
+        source_url="https://resource.tp-link.com.cn/",
+        first_seen_at=now,
+        last_seen_at=now,
+        last_seen_run_id="",
+        created_at=now,
+        updated_at=now,
     )
     hw = HardwareRevision(
-        id=new_id(), product_id=product.id, source_key="v1",
-        raw_revision="V1.0", normalized_revision="v1.0", revision_explicit=True,
-        source_url=None, first_seen_at=now, last_seen_at=now,
-        last_seen_run_id="", created_at=now, updated_at=now,
+        id=new_id(),
+        product_id=product.id,
+        source_key="v1",
+        raw_revision="V1.0",
+        normalized_revision="v1.0",
+        revision_explicit=True,
+        source_url=None,
+        first_seen_at=now,
+        last_seen_at=now,
+        last_seen_run_id="",
+        created_at=now,
+        updated_at=now,
     )
     release = FirmwareRelease(
-        id=new_id(), hardware_revision_id=hw.id, source_key="sar305g_v1.0_1.0.1",
-        version_raw="1.0.1", version_normalized="1.0.1", release_date=None,
-        title="SAR305G V1.0 升级软件", release_notes=None,
-        release_notes_url=None, source_url="https://resource.tp-link.com.cn/",
-        visibility_status=VisibilityStatus.ACTIVE, first_seen_at=now,
-        last_seen_at=now, disappeared_at=None, last_seen_run_id="",
-        created_at=now, updated_at=now,
+        id=new_id(),
+        hardware_revision_id=hw.id,
+        source_key="sar305g_v1.0_1.0.1",
+        version_raw="1.0.1",
+        version_normalized="1.0.1",
+        release_date=None,
+        title="SAR305G V1.0 升级软件",
+        release_notes=None,
+        release_notes_url=None,
+        source_url="https://resource.tp-link.com.cn/",
+        visibility_status=VisibilityStatus.ACTIVE,
+        first_seen_at=now,
+        last_seen_at=now,
+        disappeared_at=None,
+        last_seen_run_id="",
+        created_at=now,
+        updated_at=now,
     )
     artifact = FirmwareArtifact(
-        id="1234567890abcdef1234567890abcdef", release_id=release.id,
-        source_key="1657242724340094", artifact_type=ArtifactType.FIRMWARE,
+        id="1234567890abcdef1234567890abcdef",
+        release_id=release.id,
+        source_key="1657242724340094",
+        artifact_type=ArtifactType.FIRMWARE,
         original_filename="SAR305G_V1_1.0.1.zip",
         download_url="https://media.tp-link.com.cn/software/SAR305G_V1_1.0.1.zip",
-        url_last_resolved_at=now, url_expires_at=None, advertised_size=5_242_880,
-        media_type="application/zip", official_checksum=None,
-        visibility_status=VisibilityStatus.ACTIVE, first_seen_at=now,
-        last_seen_at=now, disappeared_at=None, last_seen_run_id="",
-        created_at=now, updated_at=now,
+        url_last_resolved_at=now,
+        url_expires_at=None,
+        advertised_size=5_242_880,
+        media_type="application/zip",
+        official_checksum=None,
+        visibility_status=VisibilityStatus.ACTIVE,
+        first_seen_at=now,
+        last_seen_at=now,
+        disappeared_at=None,
+        last_seen_run_id="",
+        created_at=now,
+        updated_at=now,
     )
     return ArtifactContext(
-        source=source, product=product, hardware_revision=hw,
-        release=release, artifact=artifact,
+        source=source,
+        product=product,
+        hardware_revision=hw,
+        release=release,
+        artifact=artifact,
     )
 
 
@@ -344,8 +400,8 @@ async def test_download_size_within_tolerance_ok(tmp_path):
         outcome = await downloader.download(
             url=f"http://127.0.0.1:{port}/test_firmware.bin",
             dest=tmp_path / "downloads" / "result.bin",
-            expected_size=4096,       # 近似值：实际 5000，差 904 字节
-            size_tolerance=1024,      # 容差 1 KB
+            expected_size=4096,  # 近似值：实际 5000，差 904 字节
+            size_tolerance=1024,  # 容差 1 KB
         )
 
     assert isinstance(outcome, DownloadSucceeded)
@@ -363,7 +419,7 @@ async def test_download_size_beyond_tolerance_fails(tmp_path):
         outcome = await downloader.download(
             url=f"http://127.0.0.1:{port}/test_firmware.bin",
             dest=tmp_path / "downloads" / "result.bin",
-            expected_size=3000,       # 差 2000 字节，超出容差
+            expected_size=3000,  # 差 2000 字节，超出容差
             size_tolerance=1024,
         )
 

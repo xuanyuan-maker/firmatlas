@@ -47,14 +47,14 @@ _DOWNLOAD_LIST_URL = f"{_BASE_URL}/prod/api/data/center/list"
 # 目标分类 ID（排除天线、网卡、监控套装、NVR、网络扩展、交换机、OLT、ONT、xDSL Modem）
 _TARGET_CATEGORY_IDS: dict[int, ProductType] = {
     # Wi-Fi 路由器
-    68: ProductType.ROUTER,           # Wi-Fi 7 Routers
-    18: ProductType.ROUTER,           # Wi-Fi 6 Routers
-    19: ProductType.ROUTER,           # Wi-Fi 5 Routers
-    20: ProductType.ROUTER,           # Wi-Fi 4 Routers
+    68: ProductType.ROUTER,  # Wi-Fi 7 Routers
+    18: ProductType.ROUTER,  # Wi-Fi 6 Routers
+    19: ProductType.ROUTER,  # Wi-Fi 5 Routers
+    20: ProductType.ROUTER,  # Wi-Fi 4 Routers
     # Mesh Wi-Fi
-    69: ProductType.MESH_ROUTER,      # Nova Mesh Wi-Fi 7
-    16: ProductType.MESH_ROUTER,      # Nova Mesh Wi-Fi 6
-    17: ProductType.MESH_ROUTER,      # Nova Mesh Wi-Fi 5
+    69: ProductType.MESH_ROUTER,  # Nova Mesh Wi-Fi 7
+    16: ProductType.MESH_ROUTER,  # Nova Mesh Wi-Fi 6
+    17: ProductType.MESH_ROUTER,  # Nova Mesh Wi-Fi 5
     # 5G/4G 路由器
     786932206813253: ProductType.CELLULAR_CPE,  # 5G Router
     786932514361413: ProductType.CELLULAR_CPE,  # 4G Router
@@ -62,18 +62,18 @@ _TARGET_CATEGORY_IDS: dict[int, ProductType] = {
     786936863776837: ProductType.CELLULAR_CPE,  # LCD Mobile Wi-Fi
     786937300783173: ProductType.CELLULAR_CPE,  # LED Mobile Wi-Fi
     # 企业网关
-    33: ProductType.ROUTER,           # Wireless Enterprise Router
-    32: ProductType.ROUTER,           # Wired Enterprise Router (包含 VPN 路由器)
+    33: ProductType.ROUTER,  # Wireless Enterprise Router
+    32: ProductType.ROUTER,  # Wired Enterprise Router (包含 VPN 路由器)
     # 企业无线 AP
-    37: ProductType.WIRELESS_AP,      # Outdoor AP
-    34: ProductType.WIRELESS_AP,      # Ceiling AP
-    35: ProductType.WIRELESS_AP,      # In-wall AP
+    37: ProductType.WIRELESS_AP,  # Outdoor AP
+    34: ProductType.WIRELESS_AP,  # Ceiling AP
+    35: ProductType.WIRELESS_AP,  # In-wall AP
     # CPE / 基站
-    39: ProductType.WIRELESS_AP,      # Outdoor CPE
-    40: ProductType.WIRELESS_AP,      # Basestation
+    39: ProductType.WIRELESS_AP,  # Outdoor CPE
+    40: ProductType.WIRELESS_AP,  # Basestation
     # IP 摄像头
-    31: ProductType.CAMERA,           # Home Security
-    9: ProductType.CAMERA,            # SMB Security
+    31: ProductType.CAMERA,  # Home Security
+    9: ProductType.CAMERA,  # SMB Security
 }
 
 
@@ -126,9 +126,7 @@ class TendaGlobalAdapter:
 
         for cat_id, ptype in _TARGET_CATEGORY_IDS.items():
             try:
-                products = await _fetch_all_pages(
-                    self._http, _PRODUCT_LIST_URL, _SITE_ID, cat_id
-                )
+                products = await _fetch_all_pages(self._http, _PRODUCT_LIST_URL, _SITE_ID, cat_id)
                 # 给每个产品附加 target_product_type
                 for p in products:
                     p["_target_product_type"] = ptype
@@ -238,11 +236,7 @@ async def _fetch_all_downloads(
     product_id: int,
 ) -> list[dict[str, Any]]:
     """获取某产品的全部 zip 格式固件（单页 100 条足够）。"""
-    url = (
-        f"{base_url}?siteId={site_id}"
-        f"&linkProductOrClass={product_id}"
-        f"&pageSize=100&format=zip"
-    )
+    url = f"{base_url}?siteId={site_id}&linkProductOrClass={product_id}&pageSize=100&format=zip"
     result = await http.get_json(url)
     data: dict[str, Any] = result.data
     inner = data.get("data") or {}

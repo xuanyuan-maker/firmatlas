@@ -1,0 +1,14 @@
+# 变更记录
+
+## Unreleased
+
+- 增加平台默认配置/数据目录及 `FIRMATLAS_CONFIG`、`FIRMATLAS_DATA_DIR` 优先级。
+- 增加 Standalone/Managed 目录管理模式和 Catalog 配置校验。
+- 增加纯净 SQLite Catalog 快照导出、manifest v1、确定性 gzip 和 SHA-256 校验。
+- 增加 Catalog 状态、检查、同 lineage 更新、跨 lineage `--replace` 和下载记录迁移。
+- 增加面向安全 Agent 的稳定 JSON 输出与错误代码。
+- 增加服务器 systemd 采集、导出、资产验证和 GitHub Release 发布模板。
+
+## 0.1.0
+
+- 完成 MVP：来源采集、目录查询、按需下载、校验和本地归档。

@@ -33,19 +33,19 @@ _STATIC_DOWNLOAD_PREFIX = "https://static.tp-link.com/"
 class HardwareVersionLink:
     """主页 version-list 里的一个硬件版本入口。"""
 
-    version_label: str   # 如 "V3"、"V5.60"
-    url: str             # 硬件版本子页绝对 URL
+    version_label: str  # 如 "V3"、"V5.60"
+    url: str  # 硬件版本子页绝对 URL
 
 
 @dataclass(frozen=True)
 class FirmwareEntry:
     """一个固件条目（一个 download-resource-table）。"""
 
-    title: str                    # 完整标题（含型号/硬件版本/固件版本/日期）
-    download_url: str | None      # 下载真链；无可下载文件时为 None
-    published_date: str | None    # 如 "2026-01-26"
-    file_size_text: str | None    # 原始大小文本，如 "18.66 MB"
-    language: str | None          # 如 "Multi-language"
+    title: str  # 完整标题（含型号/硬件版本/固件版本/日期）
+    download_url: str | None  # 下载真链；无可下载文件时为 None
+    published_date: str | None  # 如 "2026-01-26"
+    file_size_text: str | None  # 原始大小文本，如 "18.66 MB"
+    language: str | None  # 如 "Multi-language"
 
 
 def parse_hardware_versions(html: str) -> list[HardwareVersionLink]:
@@ -74,7 +74,7 @@ class _VersionListParser(HTMLParser):
         super().__init__()
         self.links: list[HardwareVersionLink] = []
         self._in_list = False
-        self._depth = 0            # 进入 version-list 后的标签深度（用于识别列表结束）
+        self._depth = 0  # 进入 version-list 后的标签深度（用于识别列表结束）
         self._current_href: str | None = None
         self._current_text: list[str] = []
 
@@ -96,9 +96,7 @@ class _VersionListParser(HTMLParser):
             return
         if tag == "a" and self._current_href is not None:
             label = "".join(self._current_text).strip()
-            self.links.append(
-                HardwareVersionLink(version_label=label, url=self._current_href)
-            )
+            self.links.append(HardwareVersionLink(version_label=label, url=self._current_href))
             self._current_href = None
             self._current_text = []
         if tag == "ul" and self._depth == 0:
@@ -137,9 +135,9 @@ class _FirmwareTableParser(HTMLParser):
         self.entries: list[FirmwareEntry] = []
 
         self._in_table = False
-        self._in_name = False       # 在 download-resource-name 里
+        self._in_name = False  # 在 download-resource-name 里
         self._name_parts: list[str] = []
-        self._in_detail = False     # 在 tr.detail-info 里
+        self._in_detail = False  # 在 tr.detail-info 里
         self._span_texts: list[str] = []  # detail-info 内所有 span 文本（顺序）
         self._collecting_span = False
         self._download_url: str | None = None

@@ -196,14 +196,51 @@ data/firmware/厂商/地区/型号/硬件版本/固件版本/
 
 ## 配置
 
-默认值可由 TOML 配置文件和显式 CLI 参数覆盖，优先级为“默认值 → 配置文件 → CLI”。查看最终生效配置：
+配置文件选择优先级为 `--config` → `FIRMATLAS_CONFIG` → 平台默认路径；Linux 默认是
+`$XDG_CONFIG_HOME/firmatlas/config.toml` 或 `~/.config/firmatlas/config.toml`，macOS 默认是
+`~/Library/Application Support/FirmAtlas/config.toml`。默认配置文件不存在时使用内置默认值，
+显式指定但不存在时直接报错。
+
+数据目录选择优先级为 `--data-dir` → `FIRMATLAS_DATA_DIR` → TOML 的 `data_dir` → 平台默认路径；
+Linux 默认是 `$XDG_DATA_HOME/firmatlas` 或 `~/.local/share/firmatlas`，macOS 默认是
+`~/Library/Application Support/FirmAtlas/data`。查看最终生效配置：
 
 ```bash
 uv run firmatlas --config firmatlas.toml --data-dir data config
 ```
 
 配置文件可调整 HTTP 请求/连接超时、重试次数、退避基数和下载超时。请求间隔及并发上限
-由来源策略和实现控制，不提供无限并发配置。
+由来源策略和实现控制，不提供无限并发配置。默认是 `standalone` 模式；Managed 示例：
+
+```toml
+data_dir = "/var/lib/firmatlas-client"
+
+[catalog]
+mode = "managed"
+manifest_url = "https://catalog.example.com/firmatlas/manifest.json"
+backup_count = 2
+allow_insecure_http = false
+```
+
+Managed 模式允许 `catalog status`、`catalog update`、查询和按需下载，默认拒绝本地 `crawl`；
+Standalone 模式用于个人自维护目录或规范采集服务器，不执行远程 Catalog 更新。`http://` 来源
+必须显式设置 `allow_insecure_http = true`，而 `https://` 和 `file://` 可直接使用。
+
+目录快照操作：
+
+```bash
+uv run firmatlas catalog status --format json
+uv run firmatlas catalog update --check --format json
+uv run firmatlas catalog update --replace --format json
+```
+
+更新先下载并校验候选数据库，再迁移可证明身份一致的本地下载记录，最后备份旧库并原子替换。
+跨 lineage 或来源未知时必须显式使用 `--replace`；固件文件始终留在 `data/firmware/`，但跨 lineage
+替换后旧固件可能成为未关联文件。更新失败会保留当前数据库。
+
+服务器部署模板位于 [`deploy/server`](deploy/server/README.md)，包括 systemd timer、单周期锁、
+纯净导出、资产校验和 GitHub Release 发布。认证信息只能通过受保护环境文件或 systemd credential
+注入，不能进入 manifest、快照或仓库。
 
 ## 项目结构
 
@@ -222,6 +259,7 @@ tests/           # pytest 测试与脱敏 fixture
 ```bash
 uv run pytest
 uv run ruff check .
+uv run ruff format --check .
 uv build
 ```
 

@@ -50,8 +50,8 @@ def load_token(data_dir: Path | None = None) -> TokenInfo:
 
     raise TokenNotConfiguredError(
         "未配置锐捷登录 token。请通过以下方式之一设置：\n"
-        f"  1. 环境变量: export {TOKEN_ENV_VAR}=\"你的token\"\n"
-        f"  2. 命令保存: firmatlas auth ruijie-cn --save \"你的token\"\n"
+        f'  1. 环境变量: export {TOKEN_ENV_VAR}="你的token"\n'
+        f'  2. 命令保存: firmatlas auth ruijie-cn --save "你的token"\n'
         "获取 token: 浏览器登录 ruijie.com.cn 后，F12 控制台执行：\n"
         "  document.cookie.match(/GW_ACCESS_TOKEN=([^;]+)/)[1]"
     )

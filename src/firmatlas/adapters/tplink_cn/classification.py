@@ -154,9 +154,7 @@ def _is_cellular(model: str, product_name: str) -> bool:
     return False
 
 
-def classify(
-    product_class_id: str, model: str, product_name: str = ""
-) -> Classification | None:
+def classify(product_class_id: str, model: str, product_name: str = "") -> Classification | None:
     """把 tp-link-cn 二级品类 id + 型号（+ 可选产品名）映射到领域分类。
 
     返回 None 表示该记录不是本轮采集目标（非白名单品类、摄像机品类下的

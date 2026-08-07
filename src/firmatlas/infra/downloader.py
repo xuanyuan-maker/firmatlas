@@ -84,7 +84,11 @@ class Downloader:
 
         try:
             async with self._client.stream(
-                "GET", url, headers=headers, timeout=self._timeout, follow_redirects=True,
+                "GET",
+                url,
+                headers=headers,
+                timeout=self._timeout,
+                follow_redirects=True,
             ) as response:
                 # 响应级错误：直接返回 DownloadFailed
                 if response.status_code >= 400:
