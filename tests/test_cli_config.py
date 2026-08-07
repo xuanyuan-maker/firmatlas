@@ -20,6 +20,10 @@ def test_config_command_shows_defaults(tmp_path):
     assert "HTTP 请求超时：30s" in result.output
     assert "HTTP 最大重试次数：3" in result.output
     assert "下载读取超时：60s" in result.output
+    assert "Catalog 模式：standalone" in result.output
+    assert "Catalog 清单地址：未配置" in result.output
+    assert "Catalog 备份数量：2" in result.output
+    assert "允许不安全 HTTP：关闭" in result.output
 
 
 def test_config_command_merges_file_and_cli_options(tmp_path):
@@ -38,6 +42,11 @@ max_retries = 5
 
 [download]
 read_timeout = 90
+
+[catalog]
+mode = "managed"
+manifest_url = "https://catalog.example.com/manifest.json"
+backup_count = 4
 """.strip(),
         encoding="utf-8",
     )
@@ -62,6 +71,9 @@ read_timeout = 90
     assert "HTTP 请求超时：45s" in result.output
     assert "HTTP 最大重试次数：5" in result.output
     assert "下载读取超时：90s" in result.output
+    assert "Catalog 模式：managed" in result.output
+    assert "Catalog 清单地址：https://catalog.example.com/manifest.json" in result.output
+    assert "Catalog 备份数量：4" in result.output
     assert not file_data_dir.exists()
     assert cli_data_dir.is_dir()
 

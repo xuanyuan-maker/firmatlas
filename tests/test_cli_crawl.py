@@ -127,7 +127,9 @@ def test_crawl_failed_run_exits_nonzero(tmp_path, monkeypatch):
             raise RuntimeError("API 入口不可达")
             yield  # noqa: B901 —— 使函数成为异步生成器
 
-    monkeypatch.setattr(registry, "build_adapter", lambda key, http, data_dir=None: ExplodingAdapter())
+    monkeypatch.setattr(
+        registry, "build_adapter", lambda key, http, data_dir=None: ExplodingAdapter()
+    )
 
     result = runner.invoke(cli, ["--data-dir", data, "crawl", "tp-link-cn"])
     assert result.exit_code == 1
@@ -154,6 +156,26 @@ def test_crawl_requires_init(tmp_path):
     result = runner.invoke(cli, ["--data-dir", str(tmp_path / "data"), "crawl", "tp-link-cn"])
     assert result.exit_code != 0
     assert "init" in result.output
+
+
+def test_managed_mode_rejects_local_crawl(tmp_path):
+    config_path = tmp_path / "managed.toml"
+    config_path.write_text(
+        f"""
+data_dir = "{tmp_path / "data"}"
+
+[catalog]
+mode = "managed"
+manifest_url = "https://catalog.example.com/manifest.json"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(cli, ["--config", str(config_path), "crawl", "tp-link-cn"])
+
+    assert result.exit_code != 0
+    assert "Managed 模式禁止本地 crawl" in result.output
+    assert not (tmp_path / "data" / "firmatlas.db").exists()
 
 
 def test_runs_empty(tmp_path):

@@ -87,9 +87,7 @@ def _open_database_with_recovery(data_dir: Path) -> sa.Engine:
     """打开数据库，并在当前进程独占数据目录时恢复遗留任务。"""
     engine = database.open_database(data_dir)
     try:
-        report = recover_stale_operations(
-            uow_factory=SqliteUnitOfWorkFactory(engine)
-        )
+        report = recover_stale_operations(uow_factory=SqliteUnitOfWorkFactory(engine))
     except BaseException:
         engine.dispose()
         raise
@@ -118,6 +116,10 @@ def config_command(ctx: click.Context) -> None:
     click.echo(f"HTTP 退避基数：{config.http.retry_backoff_base:g}s")
     click.echo(f"下载读取超时：{config.download.read_timeout:g}s")
     click.echo(f"下载连接超时：{config.download.connect_timeout:g}s")
+    click.echo(f"Catalog 模式：{config.catalog.mode}")
+    click.echo(f"Catalog 清单地址：{config.catalog.manifest_url or '未配置'}")
+    click.echo(f"Catalog 备份数量：{config.catalog.backup_count}")
+    click.echo(f"允许不安全 HTTP：{'开启' if config.catalog.allow_insecure_http else '关闭'}")
 
 
 @cli.command(name="init")
@@ -149,8 +151,11 @@ def init_command(ctx: click.Context) -> None:
 @click.pass_context
 def crawl_command(ctx: click.Context, source_key: str) -> None:
     """采集指定来源的固件元数据（如 tp-link-cn）。"""
-    data_dir = Path(ctx.obj["data_dir"])
     config: AppConfig = ctx.obj["config"]
+    if config.catalog.mode == "managed":
+        raise click.ClickException("Managed 模式禁止本地 crawl，请切换为 standalone 模式。")
+
+    data_dir = Path(ctx.obj["data_dir"])
     try:
         registry.check_supported(source_key)
         _ensure_auth_before_crawl(source_key, data_dir)
@@ -171,9 +176,7 @@ def crawl_command(ctx: click.Context, source_key: str) -> None:
                 request_interval=registry.crawl_request_interval(source_key),
             )
             adapter = registry.build_adapter(source_key, http, data_dir)
-            return await crawl_source(
-                adapter=adapter, uow_factory=SqliteUnitOfWorkFactory(engine)
-            )
+            return await crawl_source(adapter=adapter, uow_factory=SqliteUnitOfWorkFactory(engine))
 
     try:
         report = asyncio.run(_run())
@@ -277,11 +280,16 @@ def runs_command(ctx: click.Context, source_key: str | None, limit: int) -> None
 @click.option("--source", default=None, help="来源 source_key（如 tp-link-cn）。")
 @click.option("--region", default=None, help="地区代码（如 CN）。")
 @click.option(
-    "--family", default=None, type=click.Choice([e.value for e in ProductFamily]),
+    "--family",
+    default=None,
+    type=click.Choice([e.value for e in ProductFamily]),
     help="产品族。",
 )
 @click.option(
-    "--type", "product_type", default=None, type=click.Choice([e.value for e in ProductType]),
+    "--type",
+    "product_type",
+    default=None,
+    type=click.Choice([e.value for e in ProductType]),
     help="产品类型。",
 )
 @click.option("--series", default=None, help="系列（包含匹配）。")
@@ -289,23 +297,32 @@ def runs_command(ctx: click.Context, source_key: str | None, limit: int) -> None
 @click.option("--hardware", default=None, help="硬件版本（包含匹配）。")
 @click.option("--version", "fw_version", default=None, help="固件版本（包含匹配）。")
 @click.option(
-    "--visibility", default=None, type=click.Choice([e.value for e in VisibilityStatus]),
+    "--visibility",
+    default=None,
+    type=click.Choice([e.value for e in VisibilityStatus]),
     help="可见性状态。",
 )
 @click.option(
-    "--download-status", default=None, type=click.Choice([e.value for e in DownloadStatus]),
+    "--download-status",
+    default=None,
+    type=click.Choice([e.value for e in DownloadStatus]),
     help="最近一次下载状态。",
 )
 @click.option(
-    "--verification-status", default=None,
+    "--verification-status",
+    default=None,
     type=click.Choice([e.value for e in VerificationStatus]),
     help="最近一次校验状态。",
 )
 @click.option("--limit", default=50, show_default=True, help="最多显示条数。")
 @click.option("--offset", default=0, show_default=True, help="跳过前 N 条。")
 @click.option(
-    "--format", "output_format", default="table", show_default=True,
-    type=click.Choice(["table", "json"]), help="输出格式。",
+    "--format",
+    "output_format",
+    default="table",
+    show_default=True,
+    type=click.Choice(["table", "json"]),
+    help="输出格式。",
 )
 @click.pass_context
 def list_command(
@@ -393,8 +410,12 @@ def list_command(
 @cli.command(name="show")
 @click.argument("release_id")
 @click.option(
-    "--format", "output_format", default="table", show_default=True,
-    type=click.Choice(["table", "json"]), help="输出格式。",
+    "--format",
+    "output_format",
+    default="table",
+    show_default=True,
+    type=click.Choice(["table", "json"]),
+    help="输出格式。",
 )
 @click.pass_context
 def show_command(ctx: click.Context, release_id: str, output_format: str) -> None:
@@ -557,8 +578,7 @@ def _resolve_artifact(engine, uow_factory, raw_id: str) -> tuple[str, str]:
             for a in detail.artifacts
         )
         raise FirmAtlasError(
-            f"发布 {raw_id!r} 下有 {len(detail.artifacts)} 个 Artifact，"
-            f"请指定其中一个：\n{lines}"
+            f"发布 {raw_id!r} 下有 {len(detail.artifacts)} 个 Artifact，请指定其中一个：\n{lines}"
         )
     artifact_id = detail.artifacts[0].artifact_id
     return artifact_id, _source_key_of(uow_factory, artifact_id)
@@ -596,8 +616,7 @@ def _echo_download_report(report: DownloadReport) -> None:
         click.echo(f"  归档位置：{report.final_relative_path}")
     else:
         click.echo(
-            f"{report.artifact_id}: 下载失败（{report.status.value}"
-            f"，错误 {report.error_code}）",
+            f"{report.artifact_id}: 下载失败（{report.status.value}，错误 {report.error_code}）",
             err=True,
         )
         if report.error_message:
@@ -608,7 +627,9 @@ def _echo_download_report(report: DownloadReport) -> None:
 
 @cli.command(name="downloads")
 @click.option(
-    "--status", default=None, type=click.Choice([e.value for e in DownloadStatus]),
+    "--status",
+    default=None,
+    type=click.Choice([e.value for e in DownloadStatus]),
     help="按状态筛选。",
 )
 @click.option("--artifact", "artifact_id", default=None, help="只看指定 Artifact 的记录。")
@@ -681,9 +702,7 @@ def _echo_table(headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> None:
     def pad(text: str, target: int) -> str:
         return text + " " * (target - width(text))
 
-    widths = [
-        max(width(headers[i]), *(width(row[i]) for row in rows)) for i in range(len(headers))
-    ]
+    widths = [max(width(headers[i]), *(width(row[i]) for row in rows)) for i in range(len(headers))]
     click.echo("  ".join(pad(h, w) for h, w in zip(headers, widths, strict=True)).rstrip())
     for row in rows:
         click.echo("  ".join(pad(c, w) for c, w in zip(row, widths, strict=True)).rstrip())
@@ -780,9 +799,9 @@ def auth_command(
     click.echo(instructions)
     click.echo()
     click.echo("获取到 token 后，通过以下方式之一保存：")
-    click.echo("  1. 环境变量: export RUIJIE_TOKEN=\"你的token\"")
-    click.echo(f"  2. 文件保存: firmatlas auth {source_key} --save \"你的token\"")
-    click.echo(f"  3. 环境变量（临时）: RUIJIE_TOKEN=\"xxx\" firmatlas crawl {source_key}")
+    click.echo('  1. 环境变量: export RUIJIE_TOKEN="你的token"')
+    click.echo(f'  2. 文件保存: firmatlas auth {source_key} --save "你的token"')
+    click.echo(f'  3. 环境变量（临时）: RUIJIE_TOKEN="xxx" firmatlas crawl {source_key}')
     click.echo()
     click.echo(f"检查 token 是否有效: firmatlas auth {source_key} --check")
 
