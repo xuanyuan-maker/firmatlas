@@ -34,3 +34,7 @@ class ProcessLockError(FirmAtlasError):
 
 class ConfigError(FirmAtlasError):
     """配置文件不存在、格式错误或配置值无效。"""
+
+
+class CatalogManifestError(FirmAtlasError):
+    """Catalog manifest 结构、类型或值不符合协议。"""
