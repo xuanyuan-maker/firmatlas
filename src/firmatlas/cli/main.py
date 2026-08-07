@@ -17,6 +17,7 @@ import sqlalchemy as sa
 from firmatlas import __version__
 from firmatlas.app import registry
 from firmatlas.app.catalog_export import CatalogExportReport, export_catalog
+from firmatlas.app.catalog_status import CatalogStatusReport, get_catalog_status
 from firmatlas.app.config import AppConfig, load_config
 from firmatlas.app.crawl import CrawlReport, crawl_source
 from firmatlas.app.download import DownloadReport, download_artifact
@@ -165,6 +166,47 @@ def catalog_export_command(ctx: click.Context, output_dir: Path, output_format: 
             f"  来源 {report.counts.sources}、产品 {report.counts.products}、"
             f"发布 {report.counts.releases}、Artifact {report.counts.artifacts}"
         )
+
+
+@catalog_group.command(name="status")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+    help="输出格式。",
+)
+@click.pass_context
+def catalog_status_command(ctx: click.Context, output_format: str) -> None:
+    """显示当前 Catalog 模式和本地快照状态。"""
+    config: AppConfig = ctx.obj["config"]
+    try:
+        report = get_catalog_status(data_dir=config.data_dir, config=config.catalog)
+    except FirmAtlasError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if output_format == "json":
+        click.echo(json.dumps(_catalog_status_json(report), ensure_ascii=False, indent=2))
+        return
+    manifest = report.local_manifest
+    click.echo(f"Catalog 模式：{report.mode}")
+    click.echo(f"Catalog 来源：{report.manifest_url or '未配置'}")
+    click.echo(f"本地 manifest：{report.local_manifest_path}")
+    click.echo(f"本地 lineage：{manifest.lineage_id if manifest else '未安装'}")
+    click.echo(f"本地版本：{manifest.catalog_version if manifest else '未安装'}")
+
+
+def _catalog_status_json(report: CatalogStatusReport) -> dict[str, object]:
+    manifest = report.local_manifest
+    return {
+        "schema_version": OUTPUT_SCHEMA_VERSION,
+        "mode": report.mode,
+        "manifest_url": report.manifest_url,
+        "local_manifest_path": str(report.local_manifest_path),
+        "lineage_id": manifest.lineage_id if manifest else None,
+        "catalog_version": manifest.catalog_version if manifest else None,
+    }
 
 
 def _catalog_export_json(report: CatalogExportReport) -> dict[str, object]:

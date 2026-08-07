@@ -42,3 +42,7 @@ class CatalogManifestError(FirmAtlasError):
 
 class CatalogExportError(FirmAtlasError):
     """Catalog 快照导出失败。"""
+
+
+class CatalogSourceError(FirmAtlasError):
+    """Catalog 来源读取或 URL 解析失败。"""
