@@ -1,10 +1,23 @@
 [project]
 name = "firmatlas"
-version = "0.1.0"
-description = "面向个人漏洞猎人的 IoT 固件发现与按需获取工具"
+version = "0.1.1"
+description = "实验性质的 IoT 固件发现与按需获取工具"
 readme = "README.md"
 authors = [
     { name = "xuanyuan-maker", email = "2271818954@qq.com" }
+]
+license = "MIT"
+keywords = ["iot", "firmware", "security", "catalog", "firmware-analysis"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
 ]
 requires-python = ">=3.12"
 dependencies = [
@@ -15,6 +28,12 @@ dependencies = [
 
 [project.scripts]
 firmatlas = "firmatlas.cli.main:main"
+
+[project.urls]
+Homepage = "https://github.com/xuanyuan-maker/firmatlas"
+Repository = "https://github.com/xuanyuan-maker/firmatlas"
+Issues = "https://github.com/xuanyuan-maker/firmatlas/issues"
+Changelog = "https://github.com/xuanyuan-maker/firmatlas/blob/master/CHANGELOG.md"
 
 [build-system]
 requires = ["uv_build>=0.11.28,<0.12.0"]
@@ -28,6 +47,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
