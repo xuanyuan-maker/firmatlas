@@ -393,7 +393,8 @@ def _size_to_bytes(size_text: str | None) -> int | None:
     """把 "18.66 MB" 这类近似大小文本转成字节数（近似值）。
 
     US 站只提供两位小数的 MB/KB 文本，转出的字节数是近似值——
-    下载用例的 size_tolerance 机制会容忍此偏差。无法解析时返回 None。
+    该值只作为目录元数据显示；下载完整性由最终 HTTP 响应长度和官方校验和决定。
+    无法解析时返回 None。
     """
     if not size_text:
         return None

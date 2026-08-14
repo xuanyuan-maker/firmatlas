@@ -57,10 +57,8 @@ class ScriptedDownloader:
         *,
         url,
         dest: Path,
-        expected_size=None,
         on_progress=None,
         referer=None,
-        size_tolerance=0,
     ):
         outcome = ScriptedDownloader.outcomes.pop(0)
         if isinstance(outcome, DownloadSucceeded):

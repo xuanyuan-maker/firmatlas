@@ -50,21 +50,17 @@ class ScriptedDownloader:
         self._outcomes = list(outcomes)
         self.calls: list[str] = []  # 记录每次调用的 URL
         self.referers: list[str | None] = []  # 记录每次调用收到的 referer
-        self.size_tolerances: list[int] = []  # 记录每次调用收到的 size_tolerance
 
     async def download(
         self,
         *,
         url,
         dest: Path,
-        expected_size=None,
         on_progress=None,
         referer=None,
-        size_tolerance=0,
     ):
         self.calls.append(url)
         self.referers.append(referer)
-        self.size_tolerances.append(size_tolerance)
         outcome = self._outcomes.pop(0)
         if isinstance(outcome, DownloadSucceeded):
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -282,8 +278,6 @@ def test_success_without_official_checksum(uow_factory, seeded_artifact_id, data
     assert report.final_relative_path is not None
     # 下载用例把来源站点根地址作为 Referer 传给下载器（部分厂商校验 Referer）
     assert downloader.referers == ["https://www.tp-link.com.cn/"]
-    # 普通来源的声明大小允许 8 KiB 单位换算/舍入误差，但底层默认仍是精确校验
-    assert downloader.size_tolerances == [8 * 1024]
     # 归档文件真实存在且内容一致
     final = data_dir / report.final_relative_path
     assert final.read_bytes() == CONTENT
@@ -300,24 +294,6 @@ def test_success_without_official_checksum(uow_factory, seeded_artifact_id, data
     assert record.sha256 == CONTENT_SHA256
     assert record.final_relative_path == report.final_relative_path
     assert record.http_etag == '"tag1"'
-
-
-def test_omada_uses_source_specific_size_tolerance(
-    uow_factory,
-    seeded_omada_artifact_id,
-    data_dir,
-) -> None:
-    downloader = ScriptedDownloader([succeeded()])
-
-    report = run_download(
-        artifact_id=seeded_omada_artifact_id,
-        uow_factory=uow_factory,
-        downloader=downloader,
-        data_dir=data_dir,
-    )
-
-    assert report.status is DownloadStatus.COMPLETED
-    assert downloader.size_tolerances == [8 * 1024]
 
 
 def test_success_with_matching_sha256(uow_factory, seeded_checksum_artifact_id, data_dir):
@@ -482,6 +458,7 @@ def test_size_mismatch_fails(uow_factory, seeded_artifact_id, data_dir):
 
     assert report.status is DownloadStatus.FAILED
     assert report.error_code == "size_mismatch"
+    assert not list((data_dir / "tmp" / "downloads").glob("*.part"))
 
 
 # ---------------------------------------------------------------------------
@@ -516,7 +493,6 @@ def test_404_triggers_refresh_then_success(uow_factory, seeded_artifact_id, data
         "https://www.tp-link.com.cn/",
         "https://www.tp-link.com.cn/",
     ]
-    assert downloader.size_tolerances == [8 * 1024, 8 * 1024]
     # 刷新请求带上了 Artifact 身份
     assert len(adapter.requests) == 1
     assert adapter.requests[0].artifact_source_key == "artifact-1"
@@ -530,32 +506,6 @@ def test_404_triggers_refresh_then_success(uow_factory, seeded_artifact_id, data
     assert record.url_refresh_count == 1
     assert record.attempt_count == 2
     assert record.resolved_url == "https://example.com/fw/new-url.zip"
-
-
-def test_omada_refresh_retry_keeps_source_specific_size_tolerance(
-    uow_factory,
-    seeded_omada_artifact_id,
-    data_dir,
-) -> None:
-    downloader = ScriptedDownloader([failed_404(), succeeded()])
-    adapter = ScriptedAdapter(
-        ArtifactUrlRefreshed(
-            download_url="https://static.tp-link.com/example/refreshed.zip",
-            url_expires_at=None,
-        )
-    )
-
-    report = run_download(
-        artifact_id=seeded_omada_artifact_id,
-        uow_factory=uow_factory,
-        downloader=downloader,
-        data_dir=data_dir,
-        adapter=adapter,
-    )
-
-    assert report.status is DownloadStatus.COMPLETED
-    assert report.url_refreshed is True
-    assert downloader.size_tolerances == [8 * 1024, 8 * 1024]
 
 
 def test_refresh_only_once(uow_factory, seeded_artifact_id, data_dir):

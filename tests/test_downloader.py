@@ -6,6 +6,7 @@ ArtifactStore 测试为纯逻辑（路径构造、安全规范化、原子移动
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import threading
 from dataclasses import replace
@@ -234,7 +235,14 @@ def test_promote_moves_file_atomically(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _serve_file(tmp_path: Path, content: bytes, status: int = 200) -> tuple[int, dict]:
+def _serve_file(
+    tmp_path: Path,
+    content: bytes,
+    status: int = 200,
+    *,
+    content_length: int | str | None = None,
+    include_content_length: bool = True,
+) -> tuple[int, dict]:
     """在随机端口启动一个临时 HTTP 服务器（线程），返回 (端口号, 请求头记录)。
 
     服务器只处理一个请求然后关闭；收到的请求头写入返回的 dict。
@@ -251,7 +259,9 @@ def _serve_file(tmp_path: Path, content: bytes, status: int = 200) -> tuple[int,
             seen_headers.update(dict(self.headers))
             body = file_path.read_bytes()
             self.send_response(status)
-            self.send_header("Content-Length", str(len(body)))
+            if include_content_length:
+                length = len(body) if content_length is None else content_length
+                self.send_header("Content-Length", str(length))
             self.send_header("ETag", '"abc123"')
             self.send_header("Last-Modified", "Wed, 21 Oct 2015 07:28:00 GMT")
             self.send_header("Content-Type", "application/octet-stream")
@@ -271,6 +281,31 @@ def _serve_file(tmp_path: Path, content: bytes, status: int = 200) -> tuple[int,
     t.start()
     ready.wait(timeout=2)
     return result["port"], seen_headers
+
+
+class _AsyncBytesStream(httpx.AsyncByteStream):
+    """让 MockTransport 提供真正的异步原始响应流。"""
+
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    async def __aiter__(self):
+        yield self._body
+
+
+def _mock_stream_response(
+    request: httpx.Request,
+    body: bytes,
+    *,
+    status_code: int = 200,
+    headers: dict[str, str] | None = None,
+) -> httpx.Response:
+    return httpx.Response(
+        status_code,
+        headers=headers,
+        stream=_AsyncBytesStream(body),
+        request=request,
+    )
 
 
 @pytest.mark.anyio
@@ -323,7 +358,7 @@ async def test_downloader_uses_effective_timeout_config(tmp_path):
 
     async def handler(request):
         seen_timeout.update(request.extensions["timeout"])
-        return httpx.Response(200, content=b"configured", request=request)
+        return _mock_stream_response(request, b"configured")
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         downloader = Downloader(client, read_timeout=17, connect_timeout=4)
@@ -371,14 +406,19 @@ async def test_download_http_403(tmp_path):
 @pytest.mark.anyio
 async def test_download_size_mismatch(tmp_path):
     content = b"small"
-    port, _ = _serve_file(tmp_path, content)
 
-    async with httpx.AsyncClient() as client:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _mock_stream_response(
+            request,
+            content,
+            headers={"Content-Length": "99999"},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         downloader = Downloader(client)
         outcome = await downloader.download(
-            url=f"http://127.0.0.1:{port}/test_firmware.bin",
+            url="https://example.com/test_firmware.bin",
             dest=tmp_path / "downloads" / "result.bin",
-            expected_size=99999,  # 故意错误
         )
 
     assert isinstance(outcome, DownloadFailed)
@@ -386,22 +426,33 @@ async def test_download_size_mismatch(tmp_path):
 
 
 @pytest.mark.anyio
-async def test_download_size_within_tolerance_ok(tmp_path):
-    """实际大小与 expected 有小幅偏差，但在 size_tolerance 内 → 视为成功。
-
-    模拟 tp-link-cn 场景：advertised_size 为 KB 粒度近似值，实际文件
-    比它大几百字节；只要偏差不超过 1 KB 就应归为成功而非 size_mismatch。
-    """
-    content = b"x" * 5000
-    port, _ = _serve_file(tmp_path, content)
+async def test_download_http_content_length_mismatch_is_stable_error(tmp_path):
+    """HTTPX 在响应提前结束时抛协议异常，也要返回稳定的大小不符错误。"""
+    content = b"truncated firmware"
+    port, _ = _serve_file(tmp_path, content, content_length=len(content) + 1)
 
     async with httpx.AsyncClient() as client:
         downloader = Downloader(client)
         outcome = await downloader.download(
             url=f"http://127.0.0.1:{port}/test_firmware.bin",
             dest=tmp_path / "downloads" / "result.bin",
-            expected_size=4096,  # 近似值：实际 5000，差 904 字节
-            size_tolerance=1024,  # 容差 1 KB
+        )
+
+    assert isinstance(outcome, DownloadFailed)
+    assert outcome.error_code is DownloadErrorCode.SIZE_MISMATCH
+
+
+@pytest.mark.anyio
+async def test_download_without_content_length_is_allowed(tmp_path):
+    """没有响应长度时允许正常完成，并记录实际接收字节数。"""
+    content = b"x" * 5000
+    port, _ = _serve_file(tmp_path, content, include_content_length=False)
+
+    async with httpx.AsyncClient() as client:
+        downloader = Downloader(client)
+        outcome = await downloader.download(
+            url=f"http://127.0.0.1:{port}/test_firmware.bin",
+            dest=tmp_path / "downloads" / "result.bin",
         )
 
     assert isinstance(outcome, DownloadSucceeded)
@@ -409,52 +460,58 @@ async def test_download_size_within_tolerance_ok(tmp_path):
 
 
 @pytest.mark.anyio
-async def test_download_tp_link_three_kib_error_is_within_eight_kib_tolerance(tmp_path):
-    content = b"x" * 13_392_896
-    port, _ = _serve_file(tmp_path, content)
+async def test_download_invalid_content_length_is_allowed(tmp_path):
+    content = b"x" * 5000
 
-    async with httpx.AsyncClient() as client:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _mock_stream_response(
+            request,
+            content,
+            headers={"Content-Length": "not-a-number"},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         downloader = Downloader(client)
         outcome = await downloader.download(
-            url=f"http://127.0.0.1:{port}/test_firmware.bin",
+            url="https://example.com/test_firmware.bin",
             dest=tmp_path / "downloads" / "result.bin",
-            expected_size=13_389_824,
-            size_tolerance=8 * 1024,
         )
 
     assert isinstance(outcome, DownloadSucceeded)
-    assert outcome.bytes_received == 13_392_896
+    assert outcome.bytes_received == 5000
 
 
 @pytest.mark.anyio
-async def test_download_size_exactly_at_eight_kib_tolerance_is_ok(tmp_path):
+async def test_download_content_length_is_exact(tmp_path):
     content = b"x" * 18_192
-    port, _ = _serve_file(tmp_path, content)
+    port, _ = _serve_file(tmp_path, content, content_length=len(content))
 
     async with httpx.AsyncClient() as client:
         downloader = Downloader(client)
         outcome = await downloader.download(
             url=f"http://127.0.0.1:{port}/test_firmware.bin",
             dest=tmp_path / "downloads" / "result.bin",
-            expected_size=10_000,
-            size_tolerance=8 * 1024,
         )
 
     assert isinstance(outcome, DownloadSucceeded)
 
 
 @pytest.mark.anyio
-async def test_download_size_one_byte_over_eight_kib_tolerance_fails(tmp_path):
+async def test_download_content_length_shorter_than_body_fails(tmp_path):
     content = b"x" * 18_193
-    port, _ = _serve_file(tmp_path, content)
 
-    async with httpx.AsyncClient() as client:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _mock_stream_response(
+            request,
+            content,
+            headers={"Content-Length": str(len(content) - 1)},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         downloader = Downloader(client)
         outcome = await downloader.download(
-            url=f"http://127.0.0.1:{port}/test_firmware.bin",
+            url="https://example.com/test_firmware.bin",
             dest=tmp_path / "downloads" / "result.bin",
-            expected_size=10_000,
-            size_tolerance=8 * 1024,
         )
 
     assert isinstance(outcome, DownloadFailed)
@@ -462,16 +519,21 @@ async def test_download_size_one_byte_over_eight_kib_tolerance_fails(tmp_path):
 
 
 @pytest.mark.anyio
-async def test_download_default_tolerance_remains_exact(tmp_path):
+async def test_download_content_length_longer_than_body_fails(tmp_path):
     content = b"x" * 1_001
-    port, _ = _serve_file(tmp_path, content)
 
-    async with httpx.AsyncClient() as client:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _mock_stream_response(
+            request,
+            content,
+            headers={"Content-Length": str(len(content) + 1)},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         downloader = Downloader(client)
         outcome = await downloader.download(
-            url=f"http://127.0.0.1:{port}/test_firmware.bin",
+            url="https://example.com/test_firmware.bin",
             dest=tmp_path / "downloads" / "result.bin",
-            expected_size=1_000,
         )
 
     assert isinstance(outcome, DownloadFailed)
@@ -479,8 +541,64 @@ async def test_download_default_tolerance_remains_exact(tmp_path):
 
 
 @pytest.mark.anyio
-async def test_download_size_beyond_tolerance_fails(tmp_path):
-    """偏差超过 size_tolerance → 仍判 size_mismatch。"""
+async def test_download_content_encoding_preserves_raw_bytes(tmp_path):
+    """带 Content-Encoding 时保存和统计原始响应表示，而非解码后的内容。"""
+    content = b"firmware raw representation"
+    compressed = gzip.compress(content)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _mock_stream_response(
+            request,
+            compressed,
+            headers={
+                "Content-Length": str(len(compressed)),
+                "Content-Encoding": "gzip",
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        downloader = Downloader(client)
+        dest = tmp_path / "downloads" / "result.bin"
+        outcome = await downloader.download(url="https://example.com/fw.bin", dest=dest)
+
+    assert isinstance(outcome, DownloadSucceeded)
+    assert outcome.bytes_received == len(compressed)
+    assert outcome.sha256 == hashlib.sha256(compressed).hexdigest()
+    assert dest.read_bytes() == compressed
+
+
+@pytest.mark.anyio
+async def test_download_redirect_uses_final_content_length(tmp_path):
+    content = b"redirected firmware"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/start":
+            return _mock_stream_response(
+                request,
+                b"",
+                status_code=302,
+                headers={"Location": "/final", "Content-Length": "99999"},
+            )
+        return _mock_stream_response(
+            request,
+            content,
+            headers={"Content-Length": str(len(content))},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        downloader = Downloader(client)
+        outcome = await downloader.download(
+            url="https://example.com/start",
+            dest=tmp_path / "downloads" / "result.bin",
+        )
+
+    assert isinstance(outcome, DownloadSucceeded)
+    assert outcome.bytes_received == len(content)
+
+
+@pytest.mark.anyio
+async def test_download_directory_size_does_not_affect_result(tmp_path):
+    """下载器不接收 advertised_size，目录声明大小偏差不影响结果。"""
     content = b"x" * 5000
     port, _ = _serve_file(tmp_path, content)
 
@@ -489,12 +607,9 @@ async def test_download_size_beyond_tolerance_fails(tmp_path):
         outcome = await downloader.download(
             url=f"http://127.0.0.1:{port}/test_firmware.bin",
             dest=tmp_path / "downloads" / "result.bin",
-            expected_size=3000,  # 差 2000 字节，超出容差
-            size_tolerance=1024,
         )
 
-    assert isinstance(outcome, DownloadFailed)
-    assert outcome.error_code is DownloadErrorCode.SIZE_MISMATCH
+    assert isinstance(outcome, DownloadSucceeded)
 
 
 @pytest.mark.anyio

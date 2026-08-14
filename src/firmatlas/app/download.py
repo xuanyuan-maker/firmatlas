@@ -49,12 +49,6 @@ _REFRESHABLE_CODES = frozenset(
 # 再在用例层放大到 4 MiB，避免大文件下载时高频写 SQLite
 _PROGRESS_DB_THRESHOLD = 4 * 1024 * 1024
 
-# 大小校验容差（字节）：advertised_size 是厂商页面/API 的近似元数据，可能存在
-# KB/MB 单位换算、取整或有限小数位舍入误差；默认允许最多 8 KiB。它不是完整性校验，
-# 有官方 checksum 时仍必须精确匹配。来源特殊精度可通过下表覆盖默认值。
-_DEFAULT_SIZE_TOLERANCE_BYTES = 8 * 1024
-_SIZE_TOLERANCE_BY_SOURCE = {"dahua-global": 8 * 1024, "omada-global": 8 * 1024}
-
 
 class UnknownArtifactError(FirmAtlasError):
     """artifact_id 在目录中不存在。"""
@@ -68,10 +62,8 @@ class DownloaderPort(Protocol):
         *,
         url: str,
         dest: Path,
-        expected_size: int | None = None,
         on_progress: Callable[[int], None] | None = None,
         referer: str | None = None,
-        size_tolerance: int = 0,
     ) -> DownloadOutcome: ...
 
 
@@ -190,17 +182,12 @@ async def download_artifact(
     # --- 下载（进度节流落库）---------------------------------------------
     # Referer 用来源站点根地址：部分厂商下载服务器校验 Referer，缺失即 403
     referer = ctx.source.base_url
-    size_tolerance = _SIZE_TOLERANCE_BY_SOURCE.get(
-        ctx.source.source_key, _DEFAULT_SIZE_TOLERANCE_BYTES
-    )
     progress = _ProgressWriter(uow_factory=uow_factory, download_id=record.id)
     outcome = await downloader.download(
         url=url,
         dest=tmp_path,
-        expected_size=ctx.artifact.advertised_size,
         on_progress=progress,
         referer=referer,
-        size_tolerance=size_tolerance,
     )
 
     # --- 失效地址刷新：最多一次（AC-29）----------------------------------
@@ -235,10 +222,8 @@ async def download_artifact(
             outcome = await downloader.download(
                 url=url,
                 dest=tmp_path,
-                expected_size=ctx.artifact.advertised_size,
                 on_progress=progress,
                 referer=referer,
-                size_tolerance=size_tolerance,
             )
         else:
             refresh_note = f"地址刷新失败（{refresh_result.reason_code}）: {refresh_result.detail}"

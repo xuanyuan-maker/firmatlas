@@ -52,10 +52,8 @@ class Downloader:
         *,
         url: str,
         dest: Path,
-        expected_size: int | None = None,
         on_progress: Callable[[int], None] | None = None,
         referer: str | None = None,
-        size_tolerance: int = 0,
     ) -> DownloadOutcome:
         """流式下载到 dest（必须是 data/tmp/downloads/ 下的临时路径）。
 
@@ -63,10 +61,10 @@ class Downloader:
         on_progress 在接收过程中按 ~256 KiB 节流回调（累计字节数）。
         referer 非空时随请求发送 Referer 头（部分厂商下载服务器
         校验 Referer，缺失即 403，如 service.tp-link.com.cn）。
-        size_tolerance 是 expected_size 的允许偏差（字节）：实际大小与
-        预期相差不超过它即视为通过。默认 0（精确比对）；当来源大小为
-        厂商声明大小是 KB/MB 粒度近似值时由调用方按来源策略放宽。该容差不替代
-        官方 checksum 校验；边界条件为 abs(实际大小 - 预期大小) <= 容差。
+
+        如果最终 HTTP 响应提供合法的 Content-Length，实际接收的原始响应字节数
+        必须与之完全一致；缺少或非法的 Content-Length 按未提供处理。目录中的
+        advertised_size 不参与此处校验，官方 checksum 由下载用例负责。
 
         调用方负责：
         - 确保 dest 的父目录存在
@@ -76,6 +74,8 @@ class Downloader:
         sha256 = hashlib.sha256()
         bytes_received = 0
         last_notified = 0
+        content_length: int | None = None
+        response: httpx.Response | None = None
 
         headers = {
             "User-Agent": "FirmAtlas/0.1",
@@ -91,6 +91,7 @@ class Downloader:
                 timeout=self._timeout,
                 follow_redirects=True,
             ) as response:
+                content_length = _parse_content_length(response.headers.get("content-length"))
                 # 响应级错误：直接返回 DownloadFailed
                 if response.status_code >= 400:
                     return _http_error(response.status_code, bytes_received)
@@ -98,7 +99,9 @@ class Downloader:
                 # 打开目标文件准备写入
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 with dest.open("wb") as f:
-                    async for chunk in response.aiter_bytes(chunk_size=64 * 1024):
+                    # aiter_bytes() 会按 Content-Encoding 解码；下载器需要保存和统计
+                    # HTTP 响应的原始字节表示，因此必须使用 aiter_raw()。
+                    async for chunk in response.aiter_raw(chunk_size=64 * 1024):
                         f.write(chunk)
                         sha256.update(chunk)
                         bytes_received += len(chunk)
@@ -109,6 +112,23 @@ class Downloader:
                             on_progress(bytes_received)
                             last_notified = bytes_received
 
+        except httpx.RemoteProtocolError as exc:
+            # HTTPX 在部分传输层会先检测到 Content-Length 与响应体不一致，
+            # 再抛出协议错误，而不是让 aiter_raw() 正常结束。对调用方保持
+            # 稳定的大小不符错误码。
+            if content_length is not None:
+                return DownloadFailed(
+                    error_code=DownloadErrorCode.SIZE_MISMATCH,
+                    http_status=None,
+                    detail=f"响应 Content-Length 校验失败：{exc}",
+                    bytes_received=bytes_received,
+                )
+            return DownloadFailed(
+                error_code=DownloadErrorCode.INTERRUPTED,
+                http_status=None,
+                detail=f"下载中断：{exc}",
+                bytes_received=bytes_received,
+            )
         except httpx.TimeoutException:
             return DownloadFailed(
                 error_code=DownloadErrorCode.TIMEOUT,
@@ -135,15 +155,13 @@ class Downloader:
         if on_progress is not None and bytes_received > last_notified:
             on_progress(bytes_received)
 
-        # 大小校验（expected_size 不为 None 时才比较；size_tolerance 允许偏差）
-        size_difference = abs(bytes_received - expected_size) if expected_size is not None else None
-        if size_difference is not None and size_difference > size_tolerance:
+        assert response is not None
+        if content_length is not None and bytes_received != content_length:
             return DownloadFailed(
                 error_code=DownloadErrorCode.SIZE_MISMATCH,
                 http_status=None,
                 detail=(
-                    f"大小不符：预期 {expected_size} B，实际 {bytes_received} B，"
-                    f"差值 {size_difference} B，允许误差 {size_tolerance} B"
+                    f"响应 Content-Length 不符：声明 {content_length} B，实际 {bytes_received} B"
                 ),
                 bytes_received=bytes_received,
             )
@@ -173,3 +191,10 @@ def _http_error(status_code: int, bytes_received: int) -> DownloadFailed:
         detail=f"HTTP {status_code}",
         bytes_received=bytes_received,
     )
+
+
+def _parse_content_length(value: str | None) -> int | None:
+    """解析响应 Content-Length；缺少、空值或非法值均视为未提供。"""
+    if value is None or not value or any(char not in "0123456789" for char in value):
+        return None
+    return int(value)
