@@ -223,12 +223,23 @@ firmatlas catalog update --check --format json
 --data-dir > FIRMATLAS_DATA_DIR > TOML data_dir > 平台默认数据目录
 ```
 
+`data_dir` 是兼容旧配置的默认根目录。需要拆分数据库和固件文件时，可在 TOML 中单独配置：
+
+```toml
+data_dir = "/var/lib/firmatlas"       # 可选，旧配置兼容
+database_dir = "/var/lib/firmatlas/db"
+download_dir = "/srv/firmware"
+```
+
+`database_dir` 控制 SQLite、Catalog 状态、缓存、日志和进程锁；`download_dir` 控制固件归档与
+未完成下载的临时文件。未配置其中任一项时，它会回退到有效的 `data_dir`。
+
 默认数据目录：
 
 - Linux：`$XDG_DATA_HOME/firmatlas`，未设置时为 `~/.local/share/firmatlas`
 - macOS：`~/Library/Application Support/FirmAtlas/data`
 
-运行目录结构：
+默认运行目录结构：
 
 ```text
 data/
@@ -240,6 +251,9 @@ data/
 ├── logs/
 └── auth/
 ```
+
+配置了独立目录后，`firmatlas.db`、Catalog 状态、缓存和日志位于 `database_dir`，`firmware/`
+与 `tmp/downloads/` 位于 `download_dir`。
 
 数据库、认证信息、缓存、日志和真实固件都属于本地运行数据，不应提交到代码仓库。
 

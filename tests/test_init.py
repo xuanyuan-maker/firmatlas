@@ -39,6 +39,38 @@ def test_initialize_creates_layout_and_stamps_version(tmp_path):
     assert read_user_version(result.db_path) == SCHEMA_VERSION
 
 
+def test_initialize_separates_database_and_download_layout(tmp_path):
+    database_dir = tmp_path / "database"
+    download_dir = tmp_path / "downloads"
+
+    result = database.initialize(database_dir, download_dir)
+
+    assert result.db_path == database_dir / "firmatlas.db"
+    assert (database_dir / "cache/http").is_dir()
+    assert (database_dir / "logs").is_dir()
+    assert (download_dir / "firmware").is_dir()
+    assert (download_dir / "tmp/downloads").is_dir()
+    assert not (database_dir / "firmware").exists()
+    assert not (download_dir / "firmatlas.db").exists()
+
+
+def test_cli_init_uses_configured_database_and_download_directories(tmp_path):
+    database_dir = tmp_path / "database"
+    download_dir = tmp_path / "downloads"
+    config_path = tmp_path / "firmatlas.toml"
+    config_path.write_text(
+        f'database_dir = "{database_dir}"\ndownload_dir = "{download_dir}"',
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(cli, ["--config", str(config_path), "init"])
+
+    assert result.exit_code == 0, result.output
+    assert (database_dir / "firmatlas.db").is_file()
+    assert (download_dir / "firmware").is_dir()
+    assert not (database_dir / "firmware").exists()
+
+
 def test_initialize_is_idempotent_and_keeps_data(tmp_path):
     first = database.initialize(tmp_path / "data")
     # 初始化后写入一行，验证再次 init 不会动已有数据

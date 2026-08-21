@@ -20,6 +20,8 @@ def test_load_config_uses_linux_platform_defaults_without_file(tmp_path, monkeyp
     config = load_config()
 
     assert config.data_dir == tmp_path / "home" / ".local" / "share" / "firmatlas"
+    assert config.database_dir == config.data_dir
+    assert config.download_dir == config.data_dir
     assert config.verbose is False
     assert config.no_color is False
     assert config.http.request_timeout == 30.0
@@ -81,6 +83,31 @@ def test_load_config_prioritizes_cli_over_environment_over_toml(tmp_path, monkey
 
     assert environment_config.data_dir == environment_data_dir
     assert cli_config.data_dir == cli_data_dir
+    assert environment_config.database_dir == environment_data_dir
+    assert environment_config.download_dir == environment_data_dir
+    assert cli_config.database_dir == cli_data_dir
+    assert cli_config.download_dir == cli_data_dir
+
+
+def test_load_config_parses_separate_database_and_download_directories(tmp_path):
+    data_dir = tmp_path / "data"
+    database_dir = tmp_path / "database"
+    download_dir = tmp_path / "downloads"
+    path = tmp_path / "firmatlas.toml"
+    path.write_text(
+        (
+            f'data_dir = "{data_dir}"\n'
+            f'database_dir = "{database_dir}"\n'
+            f'download_dir = "{download_dir}"'
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path=path)
+
+    assert config.data_dir == data_dir
+    assert config.database_dir == database_dir
+    assert config.download_dir == download_dir
 
 
 def test_load_config_uses_environment_config_path(tmp_path, monkeypatch):
@@ -234,6 +261,8 @@ connect_timeout = 8
     )
 
     assert config.data_dir == Path("from-cli")
+    assert config.database_dir == Path("from-cli")
+    assert config.download_dir == Path("from-cli")
     assert config.verbose is False
     assert config.no_color is True
     assert config.http.request_timeout == 45.0

@@ -126,9 +126,15 @@ def validate_candidate_database(
 
 
 def update_catalog(
-    *, data_dir: Path, config: AppConfig, replace: bool = False
+    *,
+    data_dir: Path,
+    config: AppConfig,
+    replace: bool = False,
+    download_dir: Path | None = None,
 ) -> CatalogUpdateReport:
     """下载候选快照、迁移下载记录并原子替换本地目录数据库。"""
+    if download_dir is None:
+        download_dir = data_dir
     if config.catalog.mode != "managed":
         raise CatalogUpdateError("Standalone 模式不允许执行 Catalog 更新。")
     assert config.catalog.manifest_url is not None
@@ -199,7 +205,7 @@ def update_catalog(
         migration = migrate_download_records(
             candidate_path=candidate_path,
             old_path=database_path if not replace else None,
-            data_dir=data_dir,
+            data_dir=download_dir,
         )
         verify_updated_database(candidate_path, migration.migrated_records)
         backup_path = _backup_current_state(

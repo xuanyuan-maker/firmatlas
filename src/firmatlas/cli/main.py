@@ -81,13 +81,16 @@ def cli(
             verbose=verbose,
             no_color=no_color,
         )
-        lock = DataDirectoryLock(config.data_dir)
+        lock = DataDirectoryLock(config.database_dir)
         lock.acquire()
     except FirmAtlasError as exc:
         raise click.ClickException(str(exc)) from exc
     ctx.call_on_close(lock.release)
     ctx.obj["config"] = config
-    ctx.obj["data_dir"] = config.data_dir
+    # 旧的 data_dir 上下文键保留为 database_dir 的兼容别名；新代码使用明确名称。
+    ctx.obj["data_dir"] = config.database_dir
+    ctx.obj["database_dir"] = config.database_dir
+    ctx.obj["download_dir"] = config.download_dir
     ctx.obj["verbose"] = config.verbose
     ctx.obj["no_color"] = config.no_color
 
@@ -117,6 +120,8 @@ def config_command(ctx: click.Context) -> None:
     config_source = config.config_path if config.config_path else "未指定（使用内置默认值）"
     click.echo(f"配置文件：{config_source}")
     click.echo(f"数据目录：{config.data_dir}")
+    click.echo(f"数据库目录：{config.database_dir}")
+    click.echo(f"下载目录：{config.download_dir}")
     click.echo(f"详细日志：{'开启' if config.verbose else '关闭'}")
     click.echo(f"颜色输出：{'关闭' if config.no_color else '开启'}")
     click.echo(f"HTTP 请求超时：{config.http.request_timeout:g}s")
@@ -157,7 +162,7 @@ def catalog_export_command(ctx: click.Context, output_dir: Path, output_format: 
     """从当前规范数据库导出纯净 Catalog 快照。"""
     config: AppConfig = ctx.obj["config"]
     try:
-        report = export_catalog(data_dir=config.data_dir, output_dir=output_dir)
+        report = export_catalog(data_dir=config.database_dir, output_dir=output_dir)
     except FirmAtlasError as exc:
         if output_format == "json":
             _echo_json_error(exc)
@@ -192,7 +197,7 @@ def catalog_status_command(ctx: click.Context, output_format: str) -> None:
     """显示当前 Catalog 模式和本地快照状态。"""
     config: AppConfig = ctx.obj["config"]
     try:
-        report = get_catalog_status(data_dir=config.data_dir, config=config.catalog)
+        report = get_catalog_status(data_dir=config.database_dir, config=config.catalog)
     except FirmAtlasError as exc:
         if output_format == "json":
             _echo_json_error(exc)
@@ -236,9 +241,14 @@ def catalog_update_command(
                         error_code="invalid_arguments",
                     )
                 raise click.ClickException("catalog update --check 不需要 --replace。")
-            report = check_catalog_update(data_dir=config.data_dir, config=config)
+            report = check_catalog_update(data_dir=config.database_dir, config=config)
         else:
-            report = update_catalog(data_dir=config.data_dir, config=config, replace=replace)
+            report = update_catalog(
+                data_dir=config.database_dir,
+                download_dir=config.download_dir,
+                config=config,
+                replace=replace,
+            )
     except FirmAtlasError as exc:
         if output_format == "json":
             _echo_json_error(exc)
@@ -352,7 +362,7 @@ def init_command(ctx: click.Context) -> None:
     """初始化数据目录与数据库（可重复执行）。"""
     data_dir = Path(ctx.obj["data_dir"])
     try:
-        result = database.initialize(data_dir)
+        result = database.initialize(data_dir, Path(ctx.obj["download_dir"]))
         # 幂等写入内置来源（已存在的 source_key 跳过）
         engine = _open_database_with_recovery(data_dir)
         try:
@@ -743,7 +753,8 @@ def show_command(ctx: click.Context, release_id: str, output_format: str) -> Non
 @click.pass_context
 def download_command(ctx: click.Context, artifact_ids: tuple[str, ...], output_format: str) -> None:
     """下载固件并校验归档（接受 list 的发布 ID 或 show 的 Artifact ID，可用前缀）。"""
-    data_dir = Path(ctx.obj["data_dir"])
+    data_dir = Path(ctx.obj["database_dir"])
+    download_dir = Path(ctx.obj["download_dir"])
     config: AppConfig = ctx.obj["config"]
     try:
         engine = _open_database_with_recovery(data_dir)
@@ -753,7 +764,7 @@ def download_command(ctx: click.Context, artifact_ids: tuple[str, ...], output_f
         raise click.ClickException(str(exc)) from exc
 
     uow_factory = SqliteUnitOfWorkFactory(engine)
-    store = ArtifactStore(data_dir)
+    store = ArtifactStore(download_dir)
     failures = 0
     reports: list[DownloadReport] = []
     errors: list[dict[str, str]] = []
@@ -796,7 +807,7 @@ def download_command(ctx: click.Context, artifact_ids: tuple[str, ...], output_f
                         uow_factory=uow_factory,
                         downloader=downloader,
                         store=store,
-                        data_dir=data_dir,
+                        download_dir=download_dir,
                         adapter=adapter,
                     )
                 except FirmAtlasError as exc:

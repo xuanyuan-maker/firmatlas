@@ -237,7 +237,7 @@ def seeded_checksum_artifact_id(
 
 
 def run_download(*, artifact_id, uow_factory, downloader, data_dir, adapter=None) -> DownloadReport:
-    store = ArtifactStore(data_dir)
+    store = ArtifactStore(download_dir=data_dir)
     return asyncio.run(
         download_artifact(
             artifact_id=artifact_id,
@@ -294,6 +294,26 @@ def test_success_without_official_checksum(uow_factory, seeded_artifact_id, data
     assert record.sha256 == CONTENT_SHA256
     assert record.final_relative_path == report.final_relative_path
     assert record.http_etag == '"tag1"'
+
+
+def test_success_uses_separate_download_directory(uow_factory, seeded_artifact_id, data_dir):
+    download_dir = data_dir.parent / "downloads"
+    downloader = ScriptedDownloader([succeeded()])
+    store = ArtifactStore(download_dir=download_dir)
+
+    report = asyncio.run(
+        download_artifact(
+            artifact_id=seeded_artifact_id,
+            uow_factory=uow_factory,
+            downloader=downloader,
+            store=store,
+            download_dir=download_dir,
+        )
+    )
+
+    assert report.status is DownloadStatus.COMPLETED
+    assert (download_dir / report.final_relative_path).read_bytes() == CONTENT
+    assert not (data_dir / report.final_relative_path).exists()
 
 
 def test_success_with_matching_sha256(uow_factory, seeded_checksum_artifact_id, data_dir):

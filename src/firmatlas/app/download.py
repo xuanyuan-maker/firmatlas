@@ -3,7 +3,7 @@
 数据流（单个 Artifact）：
   1. 事务①：查 ArtifactContext，创建 DownloadRecord（同一 Artifact 已有
      活动任务时 create_download 抛 ActiveDownloadExistsError，AC-30）
-  2. 事务②：记录置 downloading，临时路径 = tmp/downloads/{记录ID}.part
+  2. 事务②：记录置 downloading，临时路径 = download_dir/tmp/downloads/{记录ID}.part
   3. Downloader 流式下载到临时文件（进度回调节流写库）
   4. 失败且为 403/404/410 且从未刷新过 → adapter.refresh_artifact_url
      最多一次（AC-29）；刷新成功则落库新地址并重试下载
@@ -93,7 +93,7 @@ class DownloadReport:
     download_id: str
     status: DownloadStatus
     verification_status: VerificationStatus
-    final_relative_path: str | None  # 相对 data 目录，如 firmware/tp-link/CN/...
+    final_relative_path: str | None  # 相对 download_dir，如 firmware/tp-link/CN/...
     bytes_received: int
     sha256: str | None
     url_refreshed: bool
@@ -107,7 +107,8 @@ async def download_artifact(
     uow_factory: UnitOfWorkFactory,
     downloader: DownloaderPort,
     store: ArtifactStorePort,
-    data_dir: Path,
+    data_dir: Path | None = None,
+    download_dir: Path | None = None,
     adapter: RefreshingAdapter | None = None,
 ) -> DownloadReport:
     """下载单个 Artifact。
@@ -116,6 +117,12 @@ async def download_artifact(
     - UnknownArtifactError：artifact_id 不在目录中
     - ActiveDownloadExistsError：同一 Artifact 已有活动下载（由仓库抛出，AC-30）
     """
+    if download_dir is None:
+        if data_dir is None:
+            raise ValueError("必须提供 download_dir")
+        # 兼容旧调用方：历史上的 data_dir 参数就是下载根目录。
+        download_dir = data_dir
+
     # --- 事务①：查上下文 + 创建下载记录 --------------------------------
     with uow_factory.begin() as uow:
         ctx = uow.catalog.get_artifact_context(artifact_id)
@@ -124,7 +131,7 @@ async def download_artifact(
         record = uow.downloads.create_download(artifact_id=artifact_id, requested_at=utc_now())
 
     tmp_rel = PurePosixPath("tmp/downloads") / f"{record.id}.part"
-    tmp_path = data_dir / tmp_rel
+    tmp_path = download_dir / tmp_rel
 
     # --- 占位符 URL 预解析（如 ruijie-cn 的 pending:{file_id}）-----------
     url = ctx.artifact.download_url

@@ -125,6 +125,27 @@ def test_download_success_and_history(seeded_cli):
     assert "completed" in result.output
     assert artifact_id[:8] in result.output
 
+
+def test_download_uses_configured_download_directory(seeded_cli):
+    runner, data, artifact_id = seeded_cli
+    database_dir = Path(data)
+    download_dir = database_dir.parent / "downloads"
+    config_path = database_dir.parent / "firmatlas.toml"
+    config_path.write_text(
+        f'database_dir = "{database_dir}"\ndownload_dir = "{download_dir}"',
+        encoding="utf-8",
+    )
+    ScriptedDownloader.outcomes = [succeeded()]
+
+    result = runner.invoke(cli, ["--config", str(config_path), "download", artifact_id])
+
+    assert result.exit_code == 0, result.output
+    line = next(ln for ln in result.output.splitlines() if "归档位置" in ln)
+    relative_path = line.split("：", 1)[1].strip()
+    assert (download_dir / relative_path).read_bytes() == CONTENT
+    assert not (database_dir / relative_path).exists()
+    assert not (download_dir / "download").exists()
+
     result = runner.invoke(cli, ["--data-dir", data, "downloads", "--format", "json"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)

@@ -55,7 +55,7 @@ class Downloader:
         on_progress: Callable[[int], None] | None = None,
         referer: str | None = None,
     ) -> DownloadOutcome:
-        """流式下载到 dest（必须是 data/tmp/downloads/ 下的临时路径）。
+        """流式下载到 dest（必须是 download_dir/tmp/downloads/ 下的临时路径）。
 
         SHA-256 在接收过程中累计算，不需要下载完成后重读文件。
         on_progress 在接收过程中按 ~256 KiB 节流回调（累计字节数）。

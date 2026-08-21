@@ -39,6 +39,8 @@ class CatalogConfig:
 @dataclass(frozen=True)
 class AppConfig:
     data_dir: Path = field(default_factory=lambda: _platform_data_dir())
+    database_dir: Path | None = None
+    download_dir: Path | None = None
     verbose: bool = False
     no_color: bool = False
     http: HttpConfig = field(default_factory=HttpConfig)
@@ -46,8 +48,26 @@ class AppConfig:
     catalog: CatalogConfig = field(default_factory=CatalogConfig)
     config_path: Path | None = None
 
+    def __post_init__(self) -> None:
+        """让直接构造的旧版 AppConfig 继续使用 data_dir。"""
+        if self.database_dir is None:
+            object.__setattr__(self, "database_dir", self.data_dir)
+        if self.download_dir is None:
+            object.__setattr__(self, "download_dir", self.data_dir)
 
-_ROOT_KEYS = frozenset({"data_dir", "verbose", "no_color", "http", "download", "catalog"})
+
+_ROOT_KEYS = frozenset(
+    {
+        "data_dir",
+        "database_dir",
+        "download_dir",
+        "verbose",
+        "no_color",
+        "http",
+        "download",
+        "catalog",
+    }
+)
 _HTTP_KEYS = frozenset({"request_timeout", "connect_timeout", "max_retries", "retry_backoff_base"})
 _DOWNLOAD_KEYS = frozenset({"read_timeout", "connect_timeout"})
 _CATALOG_KEYS = frozenset({"mode", "manifest_url", "backup_count", "allow_insecure_http"})
@@ -73,6 +93,15 @@ def load_config(
     default = AppConfig()
     file_data_dir = _path_value(raw, "data_dir", default.data_dir)
     env_data_dir = _environment_path("FIRMATLAS_DATA_DIR")
+    effective_data_dir = (
+        data_dir
+        if data_dir is not None
+        else env_data_dir
+        if env_data_dir is not None
+        else file_data_dir
+    )
+    database_dir = _path_value(raw, "database_dir", effective_data_dir)
+    download_dir = _path_value(raw, "download_dir", effective_data_dir)
     file_verbose = _bool_value(raw, "verbose", default.verbose)
     file_no_color = _bool_value(raw, "no_color", default.no_color)
 
@@ -100,13 +129,9 @@ def load_config(
     catalog = _catalog_config(catalog_raw)
 
     return AppConfig(
-        data_dir=(
-            data_dir
-            if data_dir is not None
-            else env_data_dir
-            if env_data_dir is not None
-            else file_data_dir
-        ),
+        data_dir=effective_data_dir,
+        database_dir=database_dir,
+        download_dir=download_dir,
         verbose=verbose if verbose is not None else file_verbose,
         no_color=no_color if no_color is not None else file_no_color,
         http=http,

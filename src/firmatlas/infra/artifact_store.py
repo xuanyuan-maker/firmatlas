@@ -33,13 +33,13 @@ class ArtifactStore:
     """同步的本地归档管理器。
 
     用法：
-        store = ArtifactStore(data_dir=Path("data"))
+        store = ArtifactStore(download_dir=Path("data"))
         relative = store.build_final_relative_path(ctx, original_filename)
         store.promote(tmp_path=tmp, final_relative_path=relative)
     """
 
-    def __init__(self, data_dir: Path) -> None:
-        self._firmware_dir = data_dir / "firmware"
+    def __init__(self, download_dir: Path) -> None:
+        self._firmware_dir = download_dir / "firmware"
 
     def build_final_relative_path(
         self, ctx: ArtifactContext, original_filename: str | None

@@ -15,8 +15,9 @@ from firmatlas.infra.schema import SCHEMA_VERSION, metadata
 
 DB_FILENAME = "firmatlas.db"
 
-# data/ 下需要预创建的子目录（需求分析 0x0D）
-DATA_SUBDIRS = ("firmware", "tmp/downloads", "cache/http", "logs")
+# 数据库目录和下载目录下需要预创建的子目录（需求分析 0x0D）
+DATABASE_SUBDIRS = ("cache/http", "logs")
+DOWNLOAD_SUBDIRS = ("firmware", "tmp/downloads")
 
 
 def create_engine(db_path: Path) -> sa.Engine:
@@ -42,24 +43,29 @@ class InitResult:
     schema_version: int
 
 
-def initialize(data_dir: Path) -> InitResult:
-    """初始化数据目录与数据库，可重复执行（AC-03）。
+def initialize(database_dir: Path, download_dir: Path | None = None) -> InitResult:
+    """初始化数据库目录与下载目录，可重复执行（AC-03）。
 
     - 版本戳为 0（全新或未盖戳的库）：建缺失表并盖戳为 SCHEMA_VERSION。
     - 版本戳等于 SCHEMA_VERSION：视为已初始化，不做改动。
     - 其他版本：抛 SchemaVersionMismatchError，不碰数据库内容。
+    - 未传 download_dir 时沿用旧行为，将下载目录设为 database_dir。
     """
-    for sub in DATA_SUBDIRS:
-        (data_dir / sub).mkdir(parents=True, exist_ok=True)
+    if download_dir is None:
+        download_dir = database_dir
+    for sub in DATABASE_SUBDIRS:
+        (database_dir / sub).mkdir(parents=True, exist_ok=True)
+    for sub in DOWNLOAD_SUBDIRS:
+        (download_dir / sub).mkdir(parents=True, exist_ok=True)
 
-    db_path = data_dir / DB_FILENAME
+    db_path = database_dir / DB_FILENAME
     engine = create_engine(db_path)
     try:
         with engine.begin() as conn:
             version = _read_user_version(conn)
             if version == SCHEMA_VERSION:
                 return InitResult(
-                    data_dir=data_dir,
+                    data_dir=database_dir,
                     db_path=db_path,
                     created=False,
                     schema_version=SCHEMA_VERSION,
@@ -74,7 +80,7 @@ def initialize(data_dir: Path) -> InitResult:
     finally:
         engine.dispose()
     return InitResult(
-        data_dir=data_dir, db_path=db_path, created=True, schema_version=SCHEMA_VERSION
+        data_dir=database_dir, db_path=db_path, created=True, schema_version=SCHEMA_VERSION
     )
 
 

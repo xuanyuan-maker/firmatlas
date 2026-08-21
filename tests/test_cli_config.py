@@ -15,6 +15,8 @@ def test_config_command_shows_defaults(tmp_path):
     assert result.exit_code == 0, result.output
     assert "配置文件：未指定" in result.output
     assert f"数据目录：{data_dir}" in result.output
+    assert f"数据库目录：{data_dir}" in result.output
+    assert f"下载目录：{data_dir}" in result.output
     assert "详细日志：关闭" in result.output
     assert "颜色输出：开启" in result.output
     assert "HTTP 请求超时：30s" in result.output
@@ -28,11 +30,15 @@ def test_config_command_shows_defaults(tmp_path):
 
 def test_config_command_merges_file_and_cli_options(tmp_path):
     file_data_dir = tmp_path / "file-data"
+    database_dir = tmp_path / "database"
+    download_dir = tmp_path / "downloads"
     cli_data_dir = tmp_path / "cli-data"
     config_path = tmp_path / "firmatlas.toml"
     config_path.write_text(
         f"""
 data_dir = "{file_data_dir}"
+database_dir = "{database_dir}"
+download_dir = "{download_dir}"
 verbose = false
 no_color = true
 
@@ -66,6 +72,8 @@ backup_count = 4
     assert result.exit_code == 0, result.output
     assert f"配置文件：{config_path}" in result.output
     assert f"数据目录：{cli_data_dir}" in result.output
+    assert f"数据库目录：{database_dir}" in result.output
+    assert f"下载目录：{download_dir}" in result.output
     assert "详细日志：开启" in result.output
     assert "颜色输出：关闭" in result.output
     assert "HTTP 请求超时：45s" in result.output
@@ -75,7 +83,7 @@ backup_count = 4
     assert "Catalog 清单地址：https://catalog.example.com/manifest.json" in result.output
     assert "Catalog 备份数量：4" in result.output
     assert not file_data_dir.exists()
-    assert cli_data_dir.is_dir()
+    assert not cli_data_dir.exists()
 
 
 def test_invalid_config_is_reported_before_data_directory_lock(tmp_path):
