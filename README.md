@@ -42,7 +42,7 @@ uv tool upgrade firmatlas
 服务器和自动化环境建议固定具体版本：
 
 ```bash
-uv tool install firmatlas==0.1.0
+uv tool install firmatlas==0.1.4
 ```
 
 如果命令不在 `PATH`，可用 `uv tool dir --bin` 查看可执行文件目录。
